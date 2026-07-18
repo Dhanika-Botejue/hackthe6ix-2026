@@ -215,6 +215,10 @@ textarea.input { min-height: 64px; resize: vertical; }
   100% { transform: translateX(160%) rotate(8deg); opacity: 0; }
 }
 @keyframes dlSpin { to { transform: rotate(360deg); } }
+@keyframes dlEq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+
+/* thin vertical separator between header segments */
+.bar-sep { width: 1px; align-self: stretch; background: var(--border); flex: none; }
 
 .anim-float { animation: dlFloat 4s ease-in-out infinite; }
 .anim-fadeup { animation: dlFadeUp .5s ease both; }

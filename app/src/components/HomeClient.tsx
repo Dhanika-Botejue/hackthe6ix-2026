@@ -77,6 +77,7 @@ export function HomeClient({ user }: { user: User | null }) {
           baselineHr={s.baselineHr}
           callT={s.callT}
           scenarioName={s.scenario.name}
+          scenarioIdx={s.scenarioIdx}
           difficulty={s.scenario.difficulty}
           course={s.course}
           streak={STREAK}
@@ -90,7 +91,7 @@ export function HomeClient({ user }: { user: User | null }) {
       )}
 
       {loggedIn && s.screen === "report" && s.report && (
-        <PerformanceReview report={s.report} scenarioName={s.scenario.name} goHome={() => s.go("home")} />
+        <PerformanceReview report={s.report} scenarioName={s.scenario.name} goHome={() => s.go("home")} course={s.course} streak={STREAK} />
       )}
     </div>
   );
