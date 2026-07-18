@@ -72,7 +72,6 @@ export interface ScenarioConfig {
 export type SafeAnswer = "" | "yes" | "no" | "unsure";
 
 export interface IncidentDetails {
-  callback: string;
   location: string;
   nature: string;
   safe: SafeAnswer;
@@ -84,7 +83,6 @@ export interface IncidentDetails {
 }
 
 export const EMPTY_INCIDENT: IncidentDetails = {
-  callback: "",
   location: "",
   nature: "",
   safe: "",

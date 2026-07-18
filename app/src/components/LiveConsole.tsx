@@ -7,6 +7,7 @@ import { CompletionRing } from "./Home";
 import { Icon } from "./icons";
 import { NATURE_OPTIONS, RELATIONSHIP_OPTIONS } from "@/lib/incident";
 import { mmss } from "@/lib/composure";
+import type { TracePoint } from "@/hooks/usePresageVitals";
 import type { Band, IncidentDetails, TranscriptLine } from "@/lib/types";
 
 const BAND_COLOR: Record<Band, string> = { red: "var(--red)", amber: "var(--amber)", green: "var(--green)" };
@@ -41,6 +42,39 @@ function Sparkline({ color, seed }: { color: string; seed: number }) {
   );
 }
 
+/** A real line chart of Presage trace data — breathing chest-movement or pulse-rate history. */
+function TraceChart({ points, color, height = 56, width = 280 }: { points: TracePoint[] | undefined; color: string; height?: number; width?: number }) {
+  const path = useMemo(() => {
+    if (!points || points.length < 2) return "";
+    const vs = points.map((p) => p.v);
+    const min = Math.min(...vs);
+    const max = Math.max(...vs);
+    const span = max - min || 1;
+    const t0 = points[0].t;
+    const tSpan = points[points.length - 1].t - t0 || 1;
+    const pts = points.map((p) => {
+      const x = ((p.t - t0) / tSpan) * width;
+      const y = height - ((p.v - min) / span) * (height - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return "M" + pts.join(" L");
+  }, [points, height, width]);
+
+  if (!path) {
+    return (
+      <div className="text-muted" style={{ fontSize: 12, textAlign: "center", padding: height > 30 ? "16px 0" : 0, width, height }}>
+        {height > 30 ? "Collecting signal…" : ""}
+      </div>
+    );
+  }
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: "block" }}>
+      <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function StressDots({ comp }: { comp: number }) {
   const filled = Math.max(0, Math.min(8, Math.round((100 - comp) / 12.5)));
   const label = filled <= 2 ? "Low" : filled <= 4 ? "Moderate" : filled <= 6 ? "Elevated" : "High";
@@ -66,6 +100,7 @@ function VitalRow({
   sub,
   spark,
   seed,
+  trace,
 }: {
   icon: "heart" | "lungs";
   iconColor: string;
@@ -75,6 +110,8 @@ function VitalRow({
   sub?: React.ReactNode;
   spark?: string;
   seed: number;
+  /** Real Presage trace points — shown instead of the decorative sparkline when present. */
+  trace?: TracePoint[];
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -88,7 +125,11 @@ function VitalRow({
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 2 }}>
           <span className="text-muted" style={{ fontSize: 11 }}>{sub}</span>
-          {spark && <Sparkline color={spark} seed={seed} />}
+          {trace && trace.length >= 2 ? (
+            <TraceChart points={trace} color={spark ?? iconColor} width={108} height={24} />
+          ) : (
+            spark && <Sparkline color={spark} seed={seed} />
+          )}
         </div>
       </div>
     </div>
@@ -140,9 +181,6 @@ function IncidentForm({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Labelled icon={dot("var(--blue-2)")} label="Call back number">
-        <input className="input" inputMode="tel" placeholder="Enter number…" value={details.callback} onChange={(e) => setField("callback", e.target.value)} />
-      </Labelled>
       <Labelled icon={dot("var(--blue-2)")} label="Location">
         <input className="input" placeholder="Enter location…" value={details.location} onChange={(e) => setField("location", e.target.value)} />
       </Labelled>
@@ -209,6 +247,16 @@ export function LiveConsole(props: {
   br: number;
   comp: number;
   band: Band;
+  presageEnabled?: boolean;
+  emotion?: string;
+  stress?: number;
+  pulseStable?: boolean;
+  breathingStable?: boolean;
+  breathingTrace?: TracePoint[];
+  pulseTrace?: TracePoint[];
+  presageTabHidden?: boolean;
+  validationCode?: number;
+  validationHint?: string;
   baselineHr: number;
   callT: number;
   scenarioName: string;
@@ -223,16 +271,27 @@ export function LiveConsole(props: {
   onEndCall: () => void;
 }) {
   const {
-    stream, camDenied, hr, br, comp, band, baselineHr, callT, difficulty, course, streak,
+    stream, camDenied, hr, br, comp, band, presageEnabled, emotion: realEmotion,
+    pulseStable, breathingStable, breathingTrace, pulseTrace, presageTabHidden,
+    validationCode, validationHint,
+    baselineHr, callT, difficulty, course, streak,
     callOver, transcript, liveNotice, details, setField, onEndCall,
   } = props;
 
   const clock = useClock();
   const bc = BAND_COLOR[band];
   const hrDelta = hr - baselineHr;
-  const emotion = comp >= 72 ? "Calm" : comp >= 58 ? "Focused" : comp >= 45 ? "Tense" : "Anxious";
-  const emotionSub = comp >= 72 ? "In control" : comp >= 58 ? "Slight tension" : comp >= 45 ? "Under pressure" : "Rattled";
+  // Real Presage facial-expression label only — no invented stand-in. If Presage isn't
+  // enabled or hasn't locked a reading yet, say so plainly instead of guessing.
+  const emotion = presageEnabled && realEmotion ? realEmotion : "Unavailable";
+  const emotionSub = presageEnabled && realEmotion ? "From facial expression" : "Presage not connected";
   const compMsg = band === "green" ? "Good — keep it steady" : band === "amber" ? "Holding — slow your breathing" : "Losing composure — reset";
+  // React to a signal-quality problem (e.g. "Center face in view") the instant it's
+  // reported, rather than waiting for the SDK's own `stable` flag to catch up — that
+  // flag only updates when a fresh measurement arrives, which is exactly what's
+  // missing while tracking is lost, so pulseStable/breathingStable alone can lag
+  // behind the real cause and leave the number looking silently frozen.
+  const signalDegraded = Boolean(presageEnabled && validationCode !== undefined && validationCode !== 0);
 
   const filled = (Object.keys(details) as (keyof IncidentDetails)[]).filter((k) => details[k] !== "").length;
 
@@ -254,7 +313,7 @@ export function LiveConsole(props: {
           <span className="text-muted" style={{ fontWeight: 700 }}>day streak</span>
         </div>
         <div className="chip" style={{ padding: "5px 10px 5px 6px", fontSize: 13 }}>
-          <CompletionRing pct={course} size={34} />
+          <CompletionRing pct={Math.round((course / 5) * 100)} size={34} />
           <span className="text-muted" style={{ fontWeight: 700 }}>completion</span>
         </div>
         <div style={{ flex: 1 }} />
@@ -276,6 +335,17 @@ export function LiveConsole(props: {
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "300px 1fr 340px", gap: 16, padding: 16, overflow: "hidden" }}>
         {/* left */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14, overflowY: "auto" }}>
+          {presageEnabled && presageTabHidden && (
+            <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--amber)", color: "#1a1200", fontSize: 12, fontWeight: 700 }}>
+              ⚠ This tab isn&rsquo;t focused — browsers throttle background tabs, which stalls
+              vitals capture. Keep this tab visible during the call.
+            </div>
+          )}
+          {presageEnabled && !presageTabHidden && validationCode !== undefined && validationCode !== 0 && validationHint && (
+            <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--amber)", color: "#1a1200", fontSize: 12, fontWeight: 700 }}>
+              ⚠ {validationHint} — pulse reading pauses until this clears (breathing tolerates it better).
+            </div>
+          )}
           <Panel title="YOUR WEBCAM" live={!camDenied}>
             <div style={{ position: "relative", height: 150, borderRadius: 12, overflow: "hidden", border: "2px solid var(--green)", background: "#000" }}>
               <CameraFeed stream={stream} />
@@ -287,9 +357,18 @@ export function LiveConsole(props: {
 
           <Panel title="VITALS" live={!camDenied} style={{ gap: 16 }}>
             <VitalRow icon="heart" iconColor="var(--red)" label="Heart Rate" value={String(hr)} unit="BPM" seed={1} spark="var(--red)"
-              sub={<span style={{ color: hrDelta > 8 ? "var(--red)" : "var(--muted)" }}>{hrDelta >= 0 ? "+" : ""}{hrDelta} from baseline</span>} />
+              trace={pulseTrace}
+              sub={
+                presageEnabled && (pulseStable === false || signalDegraded)
+                  ? <span style={{ color: "var(--amber)" }}>{signalDegraded ? "Recalibrating…" : "Calibrating…"} (12s window)</span>
+                  : <span style={{ color: hrDelta > 8 ? "var(--red)" : "var(--muted)" }}>{hrDelta >= 0 ? "+" : ""}{hrDelta} from baseline</span>
+              } />
             <VitalRow icon="lungs" iconColor="var(--blue-2)" label="Breathing Rate" value={String(br)} unit="/min" seed={4} spark="var(--blue-2)"
-              sub={br > 18 ? "Elevated" : "Normal"} />
+              sub={
+                presageEnabled && (breathingStable === false || signalDegraded)
+                  ? <span style={{ color: "var(--amber)" }}>{signalDegraded ? "Recalibrating…" : "Calibrating…"} (30s window)</span>
+                  : br > 18 ? "Elevated" : "Normal"
+              } />
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <Icon name="emotion" size={22} color="var(--amber)" />
               <div style={{ flex: 1 }}>
@@ -304,9 +383,17 @@ export function LiveConsole(props: {
                   <div style={{ fontWeight: 800, fontSize: 13 }}>Current Emotion</div>
                   <div className="text-muted" style={{ fontSize: 11 }}>{emotionSub}</div>
                 </div>
-                <span style={{ fontWeight: 800, color: "var(--green)" }}>{emotion}</span>
+                <span style={{ fontWeight: 800, color: presageEnabled && realEmotion ? "var(--green)" : "var(--faint)" }}>{emotion}</span>
               </div>
             </div>
+          </Panel>
+
+          <Panel title="BREATHING WAVEFORM" live={presageEnabled}>
+            {presageEnabled ? (
+              <TraceChart points={breathingTrace} color="var(--blue-2)" width={268} height={56} />
+            ) : (
+              <div className="text-muted" style={{ fontSize: 12, textAlign: "center", padding: "16px 0" }}>Presage not connected</div>
+            )}
           </Panel>
 
           <Panel title="COMPOSURE">
@@ -388,7 +475,7 @@ export function LiveConsole(props: {
         <div className="card card-pad" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "var(--muted)" }}>INCIDENT DETAILS</span>
-            <span style={{ fontWeight: 800, color: "var(--blue-2)", fontSize: 13 }}>{filled} / 9</span>
+            <span style={{ fontWeight: 800, color: "var(--blue-2)", fontSize: 13 }}>{filled} / 8</span>
           </div>
           <div style={{ overflowY: "auto", paddingRight: 6, marginRight: -6 }}>
             <IncidentForm details={details} setField={setField} />

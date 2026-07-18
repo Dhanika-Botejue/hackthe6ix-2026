@@ -6,6 +6,7 @@ import { useSession } from "@/hooks/useSession";
 import { LoginScreen } from "@/components/LoginScreen";
 import { Splash } from "@/components/Splash";
 import { Home } from "@/components/Home";
+import { Calibrating } from "@/components/Calibrating";
 import { IncomingCall } from "@/components/IncomingCall";
 import { LiveConsole } from "@/components/LiveConsole";
 import { PerformanceReview } from "@/components/PerformanceReview";
@@ -34,8 +35,20 @@ export function HomeClient({ user }: { user: User | null }) {
           course={s.course}
           streak={STREAK}
           pickScenario={s.pickScenario}
-          onLaunch={() => s.go("incoming")}
+          onLaunch={s.beginCalibration}
           account={account}
+        />
+      )}
+
+      {loggedIn && s.screen === "calibrating" && (
+        <Calibrating
+          stream={s.stream}
+          camDenied={s.camDenied}
+          blT={s.blT}
+          blHr={s.blHr}
+          baselineSecs={s.baselineSecs}
+          presageEnabled={s.presageEnabled}
+          signal={s.signal}
         />
       )}
 
@@ -51,6 +64,16 @@ export function HomeClient({ user }: { user: User | null }) {
           br={s.br}
           comp={s.comp}
           band={s.band}
+          presageEnabled={s.presageEnabled}
+          emotion={s.emotion}
+          stress={s.stress}
+          pulseStable={s.pulseStable}
+          breathingStable={s.breathingStable}
+          breathingTrace={s.breathingTrace}
+          pulseTrace={s.pulseTrace}
+          presageTabHidden={s.presageTabHidden}
+          validationCode={s.validationCode}
+          validationHint={s.validationHint}
           baselineHr={s.baselineHr}
           callT={s.callT}
           scenarioName={s.scenario.name}

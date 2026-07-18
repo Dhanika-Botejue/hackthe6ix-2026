@@ -13,7 +13,7 @@ interface Lesson {
 }
 
 const LESSONS: Lesson[] = [
-  { cat: "assault", name: "Street assault", idx: 0, state: "active" },
+  { cat: "burglary", name: "Robbery", idx: 0, state: "active" },
   { cat: "fire", name: "House fire", idx: 1, state: "open" },
   { cat: "burglary", name: "Robbery", idx: 2, state: "open" },
   { cat: "car", name: "Highway collision", idx: null, state: "locked" },
@@ -25,7 +25,8 @@ const XS = [170, 250, 168, 88, 168, 250];
 const STEP = 104;
 const TOP = 58;
 
-export function CompletionRing({ pct, size = 46 }: { pct: number; size?: number }) {
+export function CompletionRing({ pct: rawPct, size = 46 }: { pct: number; size?: number }) {
+  const pct = Math.max(0, Math.min(100, rawPct));
   const r = size / 2 - 5;
   const c = 2 * Math.PI * r;
   return (
