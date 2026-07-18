@@ -17,19 +17,21 @@ import {
 } from "@/lib/vitals-sim";
 import { usePresageVitals, type PresageLatest } from "@/hooks/usePresageVitals";
 import { EMPTY_INCIDENT } from "@/lib/types";
+import { applyVerdicts } from "@/lib/incident";
 import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
 
-export type Screen = "splash" | "home" | "ready" | "calibrating" | "console" | "report" | "history";
+export type Screen = "splash" | "home" | "ready" | "calibrating" | "incoming" | "console" | "report" | "history";
 type BaselineState = "idle" | "running" | "done";
 type CallMode = "sim" | "live" | null;
 
 const BASELINE_SECS = Number(process.env.NEXT_PUBLIC_BASELINE_SECONDS ?? 15);
 const DEMO_SPEED = Number(process.env.NEXT_PUBLIC_DEMO_SPEED ?? 1);
+const TOTAL_LESSONS = 5; // course completion is measured out of this many lessons
 
 export function useSession() {
   const [screen, setScreen] = useState<Screen>("splash");
   const [scenarioIdx, setScenarioIdx] = useState(0);
-  const [course, setCourse] = useState(30);
+  const [course, setCourse] = useState(0); // completed lessons, out of TOTAL_LESSONS
   const [details, setDetails] = useState<IncidentDetails>(EMPTY_INCIDENT);
   const [camDenied, setCamDenied] = useState(false);
   const [signal, setSignal] = useState(96);
@@ -73,6 +75,7 @@ export function useSession() {
   // "Recalibrating…") doesn't get treated as "neutral" in the composure formula — a
   // data gap isn't evidence of calm. undefined until the first real reading arrives.
   const lastFaceTensionRef = useRef<number | undefined>(undefined);
+  const completedLessonsRef = useRef<Set<number>>(new Set()); // unique lesson idxs finished
 
   const scenario = SCENARIOS[scenarioIdx];
 
@@ -87,6 +90,7 @@ export function useSession() {
   }, [stream, presage]);
 
   const conversation = useConversation({
+    volume: 1, // caller voice at max (0..1)
     onMessage: (props) => {
       if (props.role === "user") {
         lastTraineeTurnRef.current = props.message;
@@ -146,7 +150,7 @@ export function useSession() {
   const go = useCallback(
     (next: Screen) => {
       clearTimers();
-      if (next === "home" || next === "ready" || next === "calibrating" || next === "console") startCam();
+      if (next === "home" || next === "ready" || next === "calibrating" || next === "incoming" || next === "console") startCam();
       setScreen(next);
     },
     [clearTimers, startCam]
@@ -234,6 +238,8 @@ export function useSession() {
       conversationIdRef.current = null;
     }
     const courseFrom = course;
+    completedLessonsRef.current.add(scenarioIdx); // finishing a lesson completes it
+    const courseTo = Math.min(TOTAL_LESSONS, completedLessonsRef.current.size);
     const built = buildReport(
       seriesRef.current.map((s) => ({ ...s })),
       transcript,
@@ -241,7 +247,8 @@ export function useSession() {
       markers,
       details,
       scenario.truth,
-      courseFrom
+      courseFrom,
+      courseTo
     );
     built.responses.loading = true;
     const now = new Date();
@@ -263,30 +270,59 @@ export function useSession() {
     setCourse(built.courseTo);
     setScreen("report");
 
-    // Upgrade the Responses pillar with the LLM grader if configured.
+    // Upgrade the Responses + Incident pillars with the Gemini grader,
+    // sending the full call context (scenario, transcript, form vs answer
+    // key, vitals summary). 204 = no key configured → keep local grades.
+    const series = built.series;
+    const vitalsSummary = {
+      avgComposure: built.composure.avg,
+      lowestComposure: built.composure.low,
+      avgHr: series.length ? Math.round(series.reduce((a, p) => a + p.hr, 0) / series.length) : undefined,
+      avgBr: series.length ? Math.round(series.reduce((a, p) => a + p.br, 0) / series.length) : undefined,
+      durationSecs: built.durSecs,
+    };
     fetch("/api/grade", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenario: scenario.name, transcript }),
+      body: JSON.stringify({
+        scenario: { name: scenario.name, desc: scenario.desc, diff: scenario.diff },
+        transcript,
+        incident: {
+          fields: built.incident.rows.map((r) => ({
+            key: r.key,
+            label: r.label,
+            answer: r.your === "—" ? "" : r.your,
+            correct: r.correct,
+            na: scenario.truth[r.key]?.na ?? false,
+          })),
+        },
+        vitals: vitalsSummary,
+      }),
     })
       .then((r) => (r.status === 204 ? null : r.json()))
-      .then((g: ResponsesGrade | null) => {
-        setReport((prev) => {
-          if (!prev) return prev;
-          const responses: ResponsesGrade = g
-            ? { score: g.score, good: g.good, improve: g.improve, loading: false }
-            : { ...prev.responses, loading: false };
-          const total = prev.composure.score + responses.score + prev.incident.score;
-          const passed = total >= 24;
-          const courseTo = Math.min(100, prev.courseFrom + (passed ? 10 : 3));
-          setCourse(courseTo);
-          return { ...prev, responses, total, passed, courseTo };
-        });
-      })
+      .then(
+        (g: {
+          responses: ResponsesGrade;
+          incident: { verdicts: Record<string, string> };
+        } | null) => {
+          setReport((prev) => {
+            if (!prev) return prev;
+            const responses: ResponsesGrade = g
+              ? { score: g.responses.score, good: g.responses.good, improve: g.responses.improve, loading: false }
+              : { ...prev.responses, loading: false };
+            const incident = g ? applyVerdicts(prev.incident, g.incident.verdicts) : prev.incident;
+            const total = prev.composure.score + responses.score + incident.score;
+            const passed = total >= 24;
+            // Lesson completion was already settled in endCall — the regrade
+            // only updates scores, never course progress.
+            return { ...prev, responses, incident, total, passed };
+          });
+        }
+      )
       .catch(() => {
         setReport((prev) => (prev ? { ...prev, responses: { ...prev.responses, loading: false } } : prev));
       });
-  }, [clearTimers, conversation, transcript, checks, markers, scenario, details, course]);
+  }, [clearTimers, conversation, transcript, checks, markers, scenario, scenarioIdx, details, course]);
 
   /**
    * One vitals tick, real-Presage or sim depending on what's configured.
@@ -430,21 +466,13 @@ export function useSession() {
         conversation.startSession({
           conversationToken: data.token,
           connectionType: "webrtc",
-          // Persona AND greeting come from the ElevenLabs dashboard agent — we
-          // intentionally do NOT override agent.prompt or agent.firstMessage, so
-          // the dashboard system prompt is the single source of truth. The
-          // scenario name is still passed as a dynamic variable so the dashboard
-          // prompt can reference {{scenario}} if you want per-scenario behavior.
+          // Everything about the caller — persona, greeting, voice, language —
+          // comes from the ElevenLabs dashboard agent. We send NO overrides, so
+          // this connects uniformly to every case agent without each one having
+          // to enable override permissions (that mismatch is what caused the
+          // assault/fire agents to reject the session). scenario name is passed
+          // as a dynamic variable for optional {{scenario}} use in the prompt.
           dynamicVariables: { baseline_hr: baselineHr, scenario: scenario.name },
-          overrides: {
-            agent: {
-              language: "en",
-            },
-            tts: {
-              stability: 0.3,
-              similarityBoost: 0.75,
-            },
-          },
         });
         const iv = setInterval(() => runLiveTick(), 1000 / DEMO_SPEED);
         timersRef.current.push(iv);
@@ -479,8 +507,12 @@ export function useSession() {
   const beginCalibration = useCallback(() => {
     setBl("idle");
     go("calibrating");
-    startBaseline(() => startCall());
-  }, [go, startBaseline, startCall]);
+    // Calibration first (real baseline + Presage's rolling windows warming up), THEN
+    // the incoming-call ring — so by the time the trainee answers, vitals are already
+    // tracking close to real-time instead of visibly lagging for the call's first
+    // 10-30s. startCall() itself only fires once the call is actually answered.
+    startBaseline(() => go("incoming"));
+  }, [go, startBaseline]);
 
   return {
     screen,

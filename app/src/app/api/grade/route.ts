@@ -1,57 +1,169 @@
 import { NextResponse } from "next/server";
+import { GoogleGenAI, Type } from "@google/genai";
 
 /**
- * Grades the trainee's communication / decision-making (the "Responses"
- * pillar). Uses Gemini when GEMINI_API_KEY is set; otherwise returns 204 so
- * the client keeps its local heuristic grade.
+ * Post-call grader (the "Responses" and "Incident Details" pillars).
+ *
+ * Receives the full call context — scenario brief, complete transcript,
+ * the trainee's incident form, the scenario's answer key, and a vitals
+ * summary — and asks Gemini for a structured grade. The Composure pillar is
+ * intentionally NOT graded here: it is computed deterministically from the
+ * measured vitals (avg composure /10, automatic 0 on any dip below 50%),
+ * per the product spec.
+ *
+ * Returns 204 when GEMINI_API_KEY is missing so the client keeps its local
+ * fallback grades.
  */
-export async function POST(req: Request) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return new NextResponse(null, { status: 204 });
 
-  let body: { scenario?: string; transcript?: { who: string; text: string }[] };
+export const maxDuration = 60;
+
+/** Free-tier models, best first; we fall through on availability errors. */
+const MODEL_CANDIDATES = [
+  process.env.GEMINI_MODEL,
+  "gemini-3.5-flash",
+  "gemini-3-flash",
+  "gemini-2.5-flash",
+].filter((m): m is string => Boolean(m));
+
+interface GradeRequest {
+  scenario?: { name?: string; desc?: string; diff?: string };
+  transcript?: { who: string; text: string; t?: number }[];
+  incident?: {
+    fields: { key: string; label: string; answer: string; correct: string; na?: boolean }[];
+  };
+  vitals?: { avgComposure?: number; lowestComposure?: number; avgHr?: number; avgBr?: number; durationSecs?: number };
+}
+
+const RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    responses: {
+      type: Type.OBJECT,
+      description: "Grade of the dispatcher's communication and decision-making.",
+      properties: {
+        score: { type: Type.INTEGER, description: "0-10" },
+        good: { type: Type.ARRAY, items: { type: Type.STRING }, description: "2-4 one-sentence strengths" },
+        improve: { type: Type.ARRAY, items: { type: Type.STRING }, description: "1-3 one-sentence improvements" },
+      },
+      required: ["score", "good", "improve"],
+    },
+    incident: {
+      type: Type.OBJECT,
+      description: "Per-field grading of the trainee's incident form.",
+      properties: {
+        fields: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              key: { type: Type.STRING },
+              verdict: { type: Type.STRING, enum: ["correct", "wrong", "na"] },
+            },
+            required: ["key", "verdict"],
+          },
+        },
+      },
+      required: ["fields"],
+    },
+  },
+  required: ["responses", "incident"],
+};
+
+function buildPrompt(body: GradeRequest): string {
+  const lines = (body.transcript ?? [])
+    .map((l) => `${l.who === "YOU" ? "DISPATCHER" : "CALLER"}: ${l.text}`)
+    .join("\n");
+
+  const fields = (body.incident?.fields ?? [])
+    .map(
+      (f) =>
+        `- key="${f.key}" | field: ${f.label} | trainee wrote: ${f.answer || "(blank)"} | ground truth: ${
+          f.na ? "(not applicable in this scenario)" : f.correct
+        }`
+    )
+    .join("\n");
+
+  const v = body.vitals;
+  const vitals = v
+    ? `Average composure ${v.avgComposure ?? "?"}%, lowest ${v.lowestComposure ?? "?"}%, avg heart rate ${v.avgHr ?? "?"} bpm, avg breathing ${v.avgBr ?? "?"}/min, call length ${v.durationSecs ?? "?"}s.`
+    : "unavailable";
+
+  return `You are a senior 911 dispatch training evaluator reviewing a trainee's simulated emergency call.
+
+SCENARIO: ${body.scenario?.name ?? "unknown"} (${body.scenario?.diff ?? "?"} difficulty)
+${body.scenario?.desc ?? ""}
+
+TRAINEE VITALS DURING THE CALL (context only — do not score composure): ${vitals}
+
+FULL CALL TRANSCRIPT:
+${lines || "(no dispatcher turns recorded — the trainee never spoke)"}
+
+TRAINEE'S INCIDENT DETAILS FORM vs GROUND TRUTH:
+${fields || "(form not submitted)"}
+
+Your two tasks:
+
+1. "responses" — grade the DISPATCHER's communication and decision-making 0-10.
+   Criteria: got the location early and confirmed it; stayed calm and reassuring toward a panicking caller; asked one clear question at a time; explicitly checked the caller's safety (and re-checked after threats); gathered victim count and breathing status; gave correct life-saving instructions when needed (CPR, evacuate, shelter); professional language. An empty or near-empty transcript means the trainee froze: score 0-2. Write 2-4 specific "good" bullets and 1-3 specific "improve" bullets, each one sentence, each referring to what actually happened in THIS transcript (quote or paraphrase real moments; never invent events).
+
+2. "incident" — for EVERY field key listed above, judge the trainee's written answer against ground truth semantically, not literally. "5th and main" matches "Fifth and Main". "2" matches "two". "black hoodie, tall and thin" matches "Dark hoodie, 6'0, skinny build". Different formatting, abbreviations, or extra detail that is still accurate → "correct". Blank, missing, or factually wrong → "wrong". Fields whose ground truth is "(not applicable in this scenario)" → "na" regardless of what the trainee wrote, unless they invented false information, in which case "wrong".
+
+Return every field key exactly as given.`;
+}
+
+export async function POST(req: Request) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return new NextResponse(null, { status: 204 });
+
+  let body: GradeRequest;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
 
-  const lines = (body.transcript ?? [])
-    .map((l) => `${l.who === "YOU" ? "DISPATCHER" : "CALLER"}: ${l.text}`)
-    .join("\n");
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = buildPrompt(body);
 
-  const model = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
-  const prompt = `You are a 911 dispatch training evaluator. Grade the DISPATCHER's communication and decision-making during this emergency call on a scale of 0-10.
+  let lastErr: unknown = null;
+  for (const model of MODEL_CANDIDATES) {
+    try {
+      const res = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          temperature: 0.3,
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+        },
+      });
+      const parsed = JSON.parse(res.text ?? "");
 
-Scenario: ${body.scenario ?? "unknown"}
+      const score = Math.max(0, Math.min(10, Math.round(Number(parsed?.responses?.score) || 0)));
+      const good: string[] = Array.isArray(parsed?.responses?.good) ? parsed.responses.good.slice(0, 4).map(String) : [];
+      const improve: string[] = Array.isArray(parsed?.responses?.improve) ? parsed.responses.improve.slice(0, 3).map(String) : [];
 
-Transcript:
-${lines || "(no dispatcher turns recorded)"}
-
-Judge: did they get the location first, stay calm and reassuring, ask one clear question at a time, confirm caller safety, and give correct life-saving instructions? Reply ONLY with strict JSON of the form:
-{"score": <0-10 integer>, "good": ["..."], "improve": ["..."]}
-Use 2-4 short "good" points and 1-3 "improve" points, each one sentence.`;
-
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, responseMimeType: "application/json" },
-        }),
+      const verdicts: Record<string, string> = {};
+      if (Array.isArray(parsed?.incident?.fields)) {
+        for (const f of parsed.incident.fields) {
+          if (f?.key && ["correct", "wrong", "na"].includes(f?.verdict)) verdicts[String(f.key)] = String(f.verdict);
+        }
       }
-    );
-    const data = await res.json();
-    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    const parsed = JSON.parse(text);
-    const score = Math.max(0, Math.min(10, Math.round(Number(parsed.score) || 0)));
-    const good = Array.isArray(parsed.good) ? parsed.good.slice(0, 4).map(String) : [];
-    const improve = Array.isArray(parsed.improve) ? parsed.improve.slice(0, 3).map(String) : [];
-    return NextResponse.json({ score, good, improve });
-  } catch {
-    return new NextResponse(null, { status: 204 });
+
+      return NextResponse.json({
+        model,
+        responses: { score, good, improve },
+        incident: { verdicts },
+      });
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Model unavailable / not found / quota → try the next candidate.
+      if (/not.?found|not.?supported|invalid.*model|permission|quota|429|404/i.test(msg)) continue;
+      break;
+    }
   }
+
+  console.error("[grade] all models failed:", lastErr);
+  return new NextResponse(null, { status: 204 });
 }

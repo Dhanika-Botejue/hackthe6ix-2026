@@ -29,7 +29,8 @@ export function buildReport(
   markers: Marker[],
   details: IncidentDetails,
   truth: IncidentTruth,
-  courseFrom: number
+  courseFrom: number,
+  courseTo: number
 ): Report {
   const dur = series.length ? series[series.length - 1].t : 0;
   const peak = series.length ? Math.max(...series.map((p) => p.hr)) : 0;
@@ -47,7 +48,6 @@ export function buildReport(
   const incident = gradeIncident(details, truth);
   const total = composure.score + responses.score + incident.score;
   const passed = total >= PASS_THRESHOLD;
-  const courseTo = Math.min(100, courseFrom + (passed ? 10 : 3));
 
   return {
     transcript,
@@ -105,7 +105,7 @@ export function heuristicResponses(checks: Checks, transcript: TranscriptLine[])
 
   if (you.length >= 3) good.push("You kept the caller engaged with clear, professional language.");
   if (checks.breathing === undefined) improve.push("Confirm breathing status — it changes what responders do on arrival.");
-  improve.push("Ask for a callback number earlier in case the line drops.");
+  improve.push("Ask about nearby landmarks to get more precise location information.");
 
   const hits = [checks.location, checks.safety, checks.nature, checks.breathing].filter((v) => v !== undefined).length;
   const score = clamp(4 + hits * 1.5, 0, 10);

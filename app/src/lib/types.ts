@@ -72,7 +72,6 @@ export interface ScenarioConfig {
 export type SafeAnswer = "" | "yes" | "no" | "unsure";
 
 export interface IncidentDetails {
-  callback: string;
   location: string;
   nature: string;
   safe: SafeAnswer;
@@ -84,7 +83,6 @@ export interface IncidentDetails {
 }
 
 export const EMPTY_INCIDENT: IncidentDetails = {
-  callback: "",
   location: "",
   nature: "",
   safe: "",
@@ -152,8 +150,8 @@ export interface Report {
   incident: IncidentGrade;
   total: number; // /30
   passed: boolean;
-  courseFrom: number; // % before this call
-  courseTo: number; // % after
+  courseFrom: number; // lessons completed before this call (out of 5)
+  courseTo: number; // lessons completed after (out of 5)
 }
 
 export interface SessionRow {

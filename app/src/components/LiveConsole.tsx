@@ -181,9 +181,6 @@ function IncidentForm({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Labelled icon={dot("var(--blue-2)")} label="Call back number">
-        <input className="input" inputMode="tel" placeholder="Enter number…" value={details.callback} onChange={(e) => setField("callback", e.target.value)} />
-      </Labelled>
       <Labelled icon={dot("var(--blue-2)")} label="Location">
         <input className="input" placeholder="Enter location…" value={details.location} onChange={(e) => setField("location", e.target.value)} />
       </Labelled>
@@ -316,7 +313,7 @@ export function LiveConsole(props: {
           <span className="text-muted" style={{ fontWeight: 700 }}>day streak</span>
         </div>
         <div className="chip" style={{ padding: "5px 10px 5px 6px", fontSize: 13 }}>
-          <CompletionRing pct={course} size={34} />
+          <CompletionRing pct={Math.round((course / 5) * 100)} size={34} />
           <span className="text-muted" style={{ fontWeight: 700 }}>completion</span>
         </div>
         <div style={{ flex: 1 }} />
@@ -478,7 +475,7 @@ export function LiveConsole(props: {
         <div className="card card-pad" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "var(--muted)" }}>INCIDENT DETAILS</span>
-            <span style={{ fontWeight: 800, color: "var(--blue-2)", fontSize: 13 }}>{filled} / 9</span>
+            <span style={{ fontWeight: 800, color: "var(--blue-2)", fontSize: 13 }}>{filled} / 8</span>
           </div>
           <div style={{ overflowY: "auto", paddingRight: 6, marginRight: -6 }}>
             <IncidentForm details={details} setField={setField} />

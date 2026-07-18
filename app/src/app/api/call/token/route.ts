@@ -1,22 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * Mints a short-lived ElevenLabs conversation token server-side (the API
- * key never reaches the browser — PRD §6.1 / §11). One agent handles every
- * scenario — the persona, first message, and voice settings are supplied
- * per-scenario at startSession time via `overrides` (see scenarios.ts and
- * useSession.ts), so there's a single agent to create in the ElevenLabs
- * dashboard rather than one per scenario. That agent must have prompt +
- * first-message overrides enabled under Security settings.
+ * Mints a short-lived ElevenLabs conversation token server-side (the API key
+ * never reaches the browser — PRD §6.1 / §11). There is one conversational
+ * agent per case type (robbery, assault, …); the requested scenario selects
+ * which agent to use. Each agent's persona, first message, and voice are
+ * configured on the ElevenLabs dashboard.
  *
- * If no key or agent id is configured, responds with mode:"sim" so the
- * client runs the scripted-timeline fallback instead of a real call.
+ * If the API key or the selected case's agent id is not configured, responds
+ * with mode:"sim" so the client runs the scripted-timeline fallback.
  */
 export async function POST(req: NextRequest) {
   const { scenarioId } = (await req.json().catch(() => ({}))) as { scenarioId?: string };
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const agentId = process.env.ELEVENLABS_AGENT_ID;
+
+  // One ElevenLabs agent per case type. The level system (future) decides which
+  // case a scenario maps to; until then everything uses the robbery agent, which
+  // preserves current behavior. Unconfigured (blank) agents fall back to sim.
+  const agentByCase: Record<string, string | undefined> = {
+    robbery: process.env.ELEVENLABS_ROBBERY_AGENT_ID,
+    assault: process.env.ELEVENLABS_ASSAULT_AGENT_ID,
+    fire: process.env.ELEVENLABS_FIRE_AGENT_ID,
+    cardiac: process.env.ELEVENLABS_CARDIAC_AGENT_ID,
+    domestic: process.env.ELEVENLABS_DOMESTIC_AGENT_ID,
+  };
+  // Lesson dots (Home.tsx) → case → agent. Add rows as scenarios/levels grow.
+  const caseByScenario: Record<string, string> = {
+    "street-assault": "assault",
+    "house-fire": "fire",
+    "cardiac-arrest": "robbery",
+  };
+  const caseKey = (scenarioId && caseByScenario[scenarioId]) || "robbery";
+  const agentId = agentByCase[caseKey];
 
   if (!apiKey || !agentId) {
     return NextResponse.json({ mode: "sim" as const });
