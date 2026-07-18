@@ -17,13 +17,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 
 const CAPTURE_WIDTH = 320;
-const CAPTURE_INTERVAL_MS = 150; // ~6.7 fps — enough for rPPG, light on bandwidth/CPU
+// SmartSpectra's rPPG pipeline requires >=20fps to measure reliably — it errors
+// ("Frame rate stayed below the 20 fps minimum") below that. 33ms gives ~30fps,
+// with margin for the occasional dropped tick (inFlightRef skips a capture if the
+// previous frame's POST hasn't resolved yet).
+const CAPTURE_INTERVAL_MS = 33;
 const METRICS_POLL_MS = 1000;
+
+export interface TracePoint {
+  t: number;
+  v: number;
+}
 
 export interface PresageLatest {
   pulseRate?: number;
   breathingRate?: number;
+  pulseStable?: boolean;
+  breathingStable?: boolean;
+  pulseConfidence?: number;
+  breathingConfidence?: number;
+  breathingTrace?: TracePoint[];
+  pulseTrace?: TracePoint[];
   faceTension?: number;
+  expression?: string;
+  /** ValidationCode from the SDK — 0 (kOk) means signal is good; anything else pairs with validationHint. */
+  validationCode?: number;
   validationHint?: string;
   error?: string;
 }
@@ -32,6 +50,10 @@ export function usePresageVitals() {
   const [enabled, setEnabled] = useState(false);
   const [checkedStatus, setCheckedStatus] = useState(false);
   const [latest, setLatest] = useState<PresageLatest>({});
+  // Browsers clamp timers in a backgrounded/hidden tab to ~1 callback/sec, which
+  // collapses our ~30fps capture loop well below the SDK's 20fps floor — surfacing
+  // this so the UI can explain a vitals stall instead of it looking broken.
+  const [tabHidden, setTabHidden] = useState(false);
 
   const sessionIdRef = useRef<string>(
     typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Math.random())
@@ -51,6 +73,13 @@ export function usePresageVitals() {
       .finally(() => setCheckedStatus(true));
   }, []);
 
+  useEffect(() => {
+    const onVisibility = () => setTabHidden(document.hidden);
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   const pollMetrics = useCallback(() => {
     fetch(`/api/vitals/metrics?sessionId=${sessionIdRef.current}`)
       .then((r) => r.json())
@@ -59,14 +88,29 @@ export function usePresageVitals() {
           enabled: boolean;
           pulseRate?: number;
           breathingRate?: number;
+          pulseStable?: boolean;
+          breathingStable?: boolean;
+          pulseConfidence?: number;
+          breathingConfidence?: number;
+          breathingTrace?: TracePoint[];
+          pulseTrace?: TracePoint[];
           faceTension?: number;
-          validation?: { hint: string };
+          expression?: string;
+          validation?: { code: number; hint: string };
           error?: { message: string };
         }) => {
           setLatest({
             pulseRate: d.pulseRate,
             breathingRate: d.breathingRate,
+            pulseStable: d.pulseStable,
+            breathingStable: d.breathingStable,
+            pulseConfidence: d.pulseConfidence,
+            breathingConfidence: d.breathingConfidence,
+            breathingTrace: d.breathingTrace,
+            pulseTrace: d.pulseTrace,
             faceTension: d.faceTension,
+            expression: d.expression,
+            validationCode: d.validation?.code,
             validationHint: d.validation?.hint,
             error: d.error?.message,
           });
@@ -111,6 +155,12 @@ export function usePresageVitals() {
 
     const tsUs = Math.round((performance.now() + startedAtRef.current) * 1000);
     inFlightRef.current = true;
+    // A stalled/hung request (dropped connection, dev-server restart) would otherwise
+    // hold inFlightRef forever, freezing the capture loop until it resolves — the next
+    // frame's timestamp then shows a multi-second gap and trips the SDK's hard 2s limit.
+    // Bail well under that so a single bad request costs one skipped tick, not the session.
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 1500);
     fetch("/api/vitals/frame", {
       method: "POST",
       headers: {
@@ -121,9 +171,11 @@ export function usePresageVitals() {
         "x-ts-us": String(tsUs),
       },
       body: rgb,
+      signal: abort.signal,
     })
       .catch(() => {})
       .finally(() => {
+        clearTimeout(timeout);
         inFlightRef.current = false;
       });
   }, []);
@@ -156,16 +208,36 @@ export function usePresageVitals() {
     videoRef.current = null;
   }, []);
 
+  const endServerSession = useCallback(() => {
+    const payload = JSON.stringify({ sessionId: sessionIdRef.current });
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon("/api/vitals/end", new Blob([payload], { type: "application/json" }));
+    }
+  }, []);
+
+  useEffect(() => {
+    // React's unmount cleanup (below) only runs while the page itself is still alive to run
+    // JS — closing/reloading/navigating away the tab kills the execution context outright
+    // without giving that a chance to fire, so the server-side native SDK session was never
+    // actually torn down and sat there (holding GPU/native processing resources) until the
+    // 2-minute idle sweep reaped it. `pagehide` is the reliable "this page is really going
+    // away" signal (fires on close, reload, and navigation); `beforeunload` is a backup for
+    // browsers/cases where pagehide doesn't fire.
+    window.addEventListener("pagehide", endServerSession);
+    window.addEventListener("beforeunload", endServerSession);
+    return () => {
+      window.removeEventListener("pagehide", endServerSession);
+      window.removeEventListener("beforeunload", endServerSession);
+    };
+  }, [endServerSession]);
+
   useEffect(
     () => () => {
       stopCapture();
-      const payload = JSON.stringify({ sessionId: sessionIdRef.current });
-      if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-        navigator.sendBeacon("/api/vitals/end", new Blob([payload], { type: "application/json" }));
-      }
+      endServerSession();
     },
-    [stopCapture]
+    [stopCapture, endServerSession]
   );
 
-  return { enabled, checkedStatus, latest, startCapture, stopCapture };
+  return { enabled, checkedStatus, latest, startCapture, stopCapture, tabHidden };
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { bandOf, computeComposure } from "@/lib/composure";
+import { bandOf, computeComposure, estimateBreathingRateFromTrace } from "@/lib/composure";
 import { buildReport } from "@/lib/report";
 import { directorTick, initDirectorState, callerStateLabelFor, type DirectorState } from "@/lib/director";
 import { copilotFor, detectCheck } from "@/lib/live-heuristics";
@@ -19,7 +19,7 @@ import { usePresageVitals, type PresageLatest } from "@/hooks/usePresageVitals";
 import { EMPTY_INCIDENT } from "@/lib/types";
 import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
 
-export type Screen = "splash" | "home" | "ready" | "console" | "report" | "history";
+export type Screen = "splash" | "home" | "ready" | "calibrating" | "console" | "report" | "history";
 type BaselineState = "idle" | "running" | "done";
 type CallMode = "sim" | "live" | null;
 
@@ -69,6 +69,10 @@ export function useSession() {
   const lastTraineeTurnRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const checksRef = useRef<Checks>({});
+  // Holds the last real facial-tension reading so a momentary gap (lost face-lock,
+  // "Recalibrating…") doesn't get treated as "neutral" in the composure formula — a
+  // data gap isn't evidence of calm. undefined until the first real reading arrives.
+  const lastFaceTensionRef = useRef<number | undefined>(undefined);
 
   const scenario = SCENARIOS[scenarioIdx];
 
@@ -142,7 +146,7 @@ export function useSession() {
   const go = useCallback(
     (next: Screen) => {
       clearTimers();
-      if (next === "home" || next === "ready" || next === "console") startCam();
+      if (next === "home" || next === "ready" || next === "calibrating" || next === "console") startCam();
       setScreen(next);
     },
     [clearTimers, startCam]
@@ -159,41 +163,69 @@ export function useSession() {
 
   const pickScenario = useCallback((i: number) => setScenarioIdx(i), []);
 
-  const startBaseline = useCallback(() => {
-    const total = BASELINE_SECS;
-    const startHr = 83 + Math.round(Math.random() * 4);
-    setBl("running");
-    setBlT(total);
-    setBlHr(startHr);
-    const iv = setInterval(() => {
-      setBlT((t) => {
-        const nt = t - 1;
+  const startBaseline = useCallback(
+    (onDone?: () => void) => {
+      const total = BASELINE_SECS;
+      // Presage's pulse rate needs ~12s just to produce its first real value (its own
+      // rolling-average window) — a fixed 15s timer leaves almost no margin once the
+      // user takes a moment to get situated, so it used to routinely time out before a
+      // real reading ever arrived and silently lock in a fake simulated ramp (which
+      // settles toward 72) as the "baseline". In real mode we now wait past `total` for
+      // an actual reading, up to this hard ceiling, instead of ever faking one.
+      const maxWaitSecs = Math.max(total, 30);
+      let elapsed = 0;
+      setBl("running");
+      setBlT(total);
+      setBlHr(presage.enabled ? 0 : 83 + Math.round(Math.random() * 4)); // 0 = sentinel for "no real reading yet"
+      const iv = setInterval(() => {
+        elapsed += 1;
+        setBlT(Math.max(0, total - elapsed));
         const real = presageLatestRef.current;
         const hasRealHr = presage.enabled && real.pulseRate !== undefined;
 
+        if (presage.enabled) {
+          if (hasRealHr) {
+            setBlHr(Math.round(real.pulseRate!));
+            setSignal(real.validationHint ? 62 : 97);
+          } else {
+            setSignal(90);
+          }
+          const timedOut = elapsed >= maxWaitSecs;
+          if ((elapsed >= total && hasRealHr) || timedOut) {
+            clearInterval(iv);
+            setBl("done");
+            const finalHr = hasRealHr ? Math.round(real.pulseRate!) : 72;
+            const finalBr = real.breathingRate !== undefined ? Math.round(real.breathingRate) : 14;
+            setBlHr(finalHr);
+            setBaselineHr(finalHr);
+            setBaselineBr(finalBr);
+            if (!hasRealHr) {
+              setLiveNotice("Couldn't get a reliable heart-rate reading during calibration — using an estimated baseline.");
+            }
+            onDone?.();
+          }
+          return;
+        }
+
+        // Sim mode (no Presage configured): the existing fake settling ramp, clearly
+        // only ever a stand-in for the demo path, never presented as a real reading.
+        const nt = total - elapsed;
         if (nt <= 0) {
           clearInterval(iv);
           setBl("done");
-          const finalHr = hasRealHr ? Math.round(real.pulseRate!) : 72;
-          const finalBr = presage.enabled && real.breathingRate !== undefined ? Math.round(real.breathingRate) : 14;
-          setBlHr(finalHr);
-          setBaselineHr(finalHr);
-          setBaselineBr(finalBr);
-          return 0;
+          setBlHr(72);
+          setBaselineHr(72);
+          setBaselineBr(14);
+          onDone?.();
+          return;
         }
-
-        if (hasRealHr) {
-          setBlHr(Math.round(real.pulseRate!));
-          setSignal(real.validationHint ? 62 : 97);
-        } else {
-          setBlHr((h) => stepBaselineSim(h, nt, total));
-          setSignal(93 + Math.round(Math.random() * 6));
-        }
-        return nt;
-      });
-    }, 1000 / DEMO_SPEED);
-    timersRef.current.push(iv);
-  }, [presage.enabled]);
+        setBlHr((h) => stepBaselineSim(h, nt, total));
+        setSignal(93 + Math.round(Math.random() * 6));
+      }, 1000 / DEMO_SPEED);
+      timersRef.current.push(iv);
+    },
+    [presage.enabled]
+  );
 
   const endCall = useCallback(() => {
     clearTimers();
@@ -266,8 +298,20 @@ export function useSession() {
     if (presage.enabled) {
       const real = presageLatestRef.current;
       const rawHr = real.pulseRate ?? vitalsRef.current.hr;
-      const rawBr = real.breathingRate ?? vitalsRef.current.br;
-      const rawComp = computeComposure({ hr: rawHr, baselineHr, br: rawBr, baselineBr, faceTension: real.faceTension });
+      // Prefer a breathing rate estimated from the live waveform (reacts in seconds)
+      // over Presage's own breathingRate (a 30s rolling average, barely moves during a
+      // short demo call); fall back to Presage's rate, then to the last known value —
+      // never to baseline/neutral just because a fresher reading isn't in yet.
+      const fastBr = estimateBreathingRateFromTrace(real.breathingTrace);
+      const rawBr = fastBr ?? real.breathingRate ?? vitalsRef.current.br;
+      if (real.faceTension !== undefined) lastFaceTensionRef.current = real.faceTension;
+      const rawComp = computeComposure({
+        hr: rawHr,
+        baselineHr,
+        br: rawBr,
+        baselineBr,
+        faceTension: lastFaceTensionRef.current,
+      });
       return stepVitalsFromPresage(vitalsRef.current, rawHr, rawBr, rawComp);
     }
     return stepVitalsSim(vitalsRef.current);
@@ -423,6 +467,21 @@ export function useSession() {
     setCallMode(mode);
   }, [baselineHr, baselineBr, clearTimers, conversation, go, runLiveTick, runSimTick, scenario]);
 
+  /**
+   * Entry point from the lesson picker: runs the pre-call baseline capture (webcam +
+   * Presage were already warming up in the background since the Home screen mounted;
+   * this just locks in a real resting HR/BR instead of the 72/14 defaults) before the
+   * call actually starts. This also front-loads Presage's own rolling-average windows
+   * (12s for pulse rate, 30s for breathing rate per its docs) so the live call opens
+   * with vitals already tracking close to real-time instead of visibly lagging behind
+   * the trainee's actual state for the first 10-30s of the call.
+   */
+  const beginCalibration = useCallback(() => {
+    setBl("idle");
+    go("calibrating");
+    startBaseline(() => startCall());
+  }, [go, startBaseline, startCall]);
+
   return {
     screen,
     go,
@@ -442,6 +501,7 @@ export function useSession() {
     baselineHr,
     baselineSecs: BASELINE_SECS,
     startBaseline,
+    beginCalibration,
     startCall,
     endCall,
     callMode,
@@ -450,6 +510,22 @@ export function useSession() {
     br,
     comp,
     band,
+    presageEnabled: presage.enabled,
+    emotion: presage.latest.expression,
+    stress: presage.enabled ? 100 - comp : undefined,
+    // SmartSpectra's pulse/breathing readings are rolling averages (12s / 30s) that
+    // report stable=false until that window fills — surfacing it so the UI can show
+    // "calibrating" instead of looking like a stuck/laggy number.
+    pulseStable: presage.latest.pulseStable,
+    breathingStable: presage.latest.breathingStable,
+    breathingTrace: presage.latest.breathingTrace,
+    pulseTrace: presage.latest.pulseTrace,
+    presageTabHidden: presage.tabHidden,
+    // 0 = kOk (good signal). Anything else pairs with a human-readable hint
+    // ("Center face in view", "No face found", ...) explaining why a reading
+    // might be stale instead of it silently looking frozen.
+    validationCode: presage.latest.validationCode,
+    validationHint: presage.latest.validationHint,
     transcript,
     copilot,
     brief,

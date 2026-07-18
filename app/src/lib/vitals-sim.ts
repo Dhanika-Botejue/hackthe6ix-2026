@@ -37,11 +37,23 @@ export function stepVitalsSim(s: VitalsSimState): VitalsSimState {
 }
 
 /**
- * One second of EMA smoothing toward real Presage readings (PRD §6.2's
- * "display value = EMA over ~3s" — alpha here is per-tick, not per-3s).
- * `rawHr`/`rawBr` should already be "hold last known good value" from the
- * caller when a fresh sample isn't in yet; `rawComp` is computeComposure()'s
- * output for this tick.
+ * One second of EMA smoothing toward real Presage readings. `rawHr`/`rawBr` are
+ * already SmartSpectra's own 12s/30s rolling averages (Presage's own docs: pulse
+ * rate is a 12-second average, breathing rate a 30-second average) — that's
+ * where nearly all of the real-world lag between "you start breathing hard" and
+ * "the number visibly moves" comes from, and it's inherent to the rPPG
+ * measurement, not fixable here. Since the input is already smoothed upstream,
+ * this EMA only needs to take the edge off tick-to-tick jitter, not fight
+ * noise — a high alpha keeps us from stacking extra seconds of our own lag on
+ * top of Presage's window.
+ *
+ * `rawComp` is different: it's computeComposure()'s output recomputed fresh every
+ * tick from whatever the inputs are *right now*, so — unlike hr/br — it isn't
+ * already smoothed upstream. Its own max-driven formula (see computeComposure) can
+ * legitimately swing tens of points in a single tick when one input spikes, so this
+ * needs a noticeably lower alpha to actually look like a gradual reaction on
+ * screen rather than an instant jump, while still settling in a few seconds, not
+ * dragging out over half a minute.
  */
 export function stepVitalsFromPresage(
   s: VitalsSimState,
@@ -49,9 +61,9 @@ export function stepVitalsFromPresage(
   rawBr: number,
   rawComp: number
 ): VitalsSimState {
-  const hr = Math.round(ema(s.hr, rawHr, 0.4));
-  const br = Math.round(ema(s.br, rawBr, 0.4));
-  const comp = Math.max(0, Math.min(100, Math.round(ema(s.comp, rawComp, 0.35))));
+  const hr = Math.round(ema(s.hr, rawHr, 0.7));
+  const br = Math.round(ema(s.br, rawBr, 0.7));
+  const comp = Math.max(0, Math.min(100, Math.round(ema(s.comp, rawComp, 0.25))));
   return { hr, hrTarget: s.hrTarget, br, comp, compTarget: s.compTarget };
 }
 
