@@ -25,7 +25,8 @@ const XS = [170, 250, 168, 88, 168, 250];
 const STEP = 104;
 const TOP = 58;
 
-export function CompletionRing({ pct, size = 46 }: { pct: number; size?: number }) {
+export function CompletionRing({ pct: rawPct, size = 46 }: { pct: number; size?: number }) {
+  const pct = Math.max(0, Math.min(100, rawPct));
   const r = size / 2 - 5;
   const c = 2 * Math.PI * r;
   return (

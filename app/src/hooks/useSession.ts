@@ -281,9 +281,9 @@ export function useSession() {
             const incident = g ? applyVerdicts(prev.incident, g.incident.verdicts) : prev.incident;
             const total = prev.composure.score + responses.score + incident.score;
             const passed = total >= 24;
-            const courseTo = Math.min(100, prev.courseFrom + (passed ? 10 : 3));
-            setCourse(courseTo);
-            return { ...prev, responses, incident, total, passed, courseTo };
+            // Lesson completion was already settled in endCall — the regrade
+            // only updates scores, never course progress.
+            return { ...prev, responses, incident, total, passed };
           });
         }
       )

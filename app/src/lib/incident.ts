@@ -32,7 +32,6 @@ export const RELATIONSHIP_OPTIONS = [
 
 /** Labels shown in the form and the after-action quiz, in display order. */
 export const INCIDENT_FIELDS: { key: keyof IncidentDetails; label: string }[] = [
-  { key: "callback", label: "Call back number" },
   { key: "location", label: "Location" },
   { key: "nature", label: "Nature of emergency" },
   { key: "safe", label: "Is the caller safe right now?" },

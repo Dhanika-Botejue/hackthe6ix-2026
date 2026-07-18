@@ -100,7 +100,6 @@ export const SCENARIOS: ScenarioConfig[] = [
     category: "burglary",
     tagClass: "tag-accent",
     truth: {
-      callback: { correct: "—", na: true },
       location: { correct: "Fifth and Main", accept: ["fifth and main", "5th and main", "fifth & main", "5th & main"] },
       nature: { correct: "Robbery", value: "Robbery" },
       safe: { correct: "Yes", value: "yes" },
@@ -128,7 +127,6 @@ export const SCENARIOS: ScenarioConfig[] = [
     category: "fire",
     tagClass: "tag-neutral",
     truth: {
-      callback: { correct: "—", na: true },
       location: { correct: "30 Twenty-Seventh Street", accept: ["twenty-seventh", "twenty seventh", "27th", "30 27"] },
       nature: { correct: "House fire", value: "Fire" },
       safe: { correct: "—", na: true },
@@ -156,7 +154,6 @@ export const SCENARIOS: ScenarioConfig[] = [
     category: "medical",
     tagClass: "tag-outline",
     truth: {
-      callback: { correct: "—", na: true },
       location: { correct: "18 Birch Avenue, Apt 3B", accept: ["birch", "18 birch", "3b"] },
       nature: { correct: "Medical emergency", value: "Medical emergency" },
       safe: { correct: "Yes", value: "yes" },
