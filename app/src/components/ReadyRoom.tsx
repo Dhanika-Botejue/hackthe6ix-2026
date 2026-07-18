@@ -19,6 +19,7 @@ export function ReadyRoom(props: {
   startBaseline: () => void;
   startCall: () => void;
   goHistory: () => void;
+  account?: { label: string; href?: string; cta?: string } | null;
 }) {
   const {
     scenarios,
@@ -35,6 +36,7 @@ export function ReadyRoom(props: {
     startBaseline,
     startCall,
     goHistory,
+    account,
   } = props;
 
   const ringOffset = 351.9 * (blT / baselineSecs);
@@ -56,6 +58,16 @@ export function ReadyRoom(props: {
           >
             Session history
           </a>
+          {account && (
+            <span className="text-muted" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+              {account.label}
+              {account.href && (
+                <a href={account.href} style={{ fontSize: 12, textDecoration: "none" }}>
+                  {account.cta}
+                </a>
+              )}
+            </span>
+          )}
         </div>
         <div className="text-muted" style={{ fontSize: 13, marginBottom: 20 }}>
           Select a scenario. Capture your baseline. Take the call.

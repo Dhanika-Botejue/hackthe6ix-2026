@@ -1,8 +1,6 @@
-"use client";
-
 import { Blueprint } from "./Blueprint";
 
-export function LoginScreen({ onContinue }: { onContinue: () => void }) {
+export function LoginScreen({ onDemo }: { onDemo: () => void }) {
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
       <Blueprint style={{ width: 380, background: "var(--color-bg)", padding: "34px 32px 28px" }}>
@@ -20,31 +18,49 @@ export function LoginScreen({ onContinue }: { onContinue: () => void }) {
         >
           Dispatch training simulator
         </div>
-        <div className="field" style={{ marginBottom: 14 }}>
-          <label>Email</label>
-          <input className="input" type="email" placeholder="trainee@dispatch.gov" />
-        </div>
-        <div className="field" style={{ marginBottom: 20 }}>
-          <label>Password</label>
-          <input className="input" type="password" placeholder="••••••••" />
-        </div>
-        <button className="btn btn-primary btn-block" onClick={onContinue}>
+
+        <a href="/auth/login" className="btn btn-primary btn-block" style={{ display: "block", textAlign: "center", textDecoration: "none" }}>
           Sign in
-        </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
+        </a>
+        <a
+          href="/auth/login?screen_hint=signup"
+          style={{ display: "block", textAlign: "center", marginTop: 10, fontSize: 13 }}
+        >
+          Create an account
+        </a>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
           <div style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
           <span className="text-muted" style={{ fontSize: 11, letterSpacing: ".1em" }}>
             OR
           </span>
           <div style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
         </div>
-        <button className="btn btn-secondary btn-block" onClick={onContinue}>
-          Continue with Auth0
+
+        <a
+          href="/auth/login?connection=google-oauth2"
+          className="btn btn-secondary btn-block"
+          style={{ display: "block", textAlign: "center", textDecoration: "none", marginBottom: 10 }}
+        >
+          Continue with Google
+        </a>
+        <div className="text-muted" style={{ fontSize: 12, textAlign: "center" }}>
+          Enterprise SSO and passwordless email are also available on the sign-in page.
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
+          <div style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
+          <span className="text-muted" style={{ fontSize: 11, letterSpacing: ".1em" }}>
+            OR
+          </span>
+          <div style={{ flex: 1, height: 1, background: "var(--color-divider)" }} />
+        </div>
+
+        <button className="btn btn-secondary btn-block" onClick={onDemo}>
+          Try the demo — no login
         </button>
-        <div style={{ textAlign: "center", marginTop: 18, fontSize: 13 }}>
-          <a href="#" onClick={(e) => { e.preventDefault(); onContinue(); }}>
-            Create an account
-          </a>
+        <div className="text-muted" style={{ fontSize: 12, textAlign: "center", marginTop: 8 }}>
+          Runs the scripted scenario locally. Nothing is saved to an account.
         </div>
       </Blueprint>
     </div>
