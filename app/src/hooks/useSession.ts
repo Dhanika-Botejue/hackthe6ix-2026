@@ -19,17 +19,18 @@ import { usePresageVitals, type PresageLatest } from "@/hooks/usePresageVitals";
 import { EMPTY_INCIDENT } from "@/lib/types";
 import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
 
-export type Screen = "splash" | "home" | "ready" | "console" | "report" | "history";
+export type Screen = "splash" | "home" | "ready" | "incoming" | "console" | "report" | "history";
 type BaselineState = "idle" | "running" | "done";
 type CallMode = "sim" | "live" | null;
 
 const BASELINE_SECS = Number(process.env.NEXT_PUBLIC_BASELINE_SECONDS ?? 15);
 const DEMO_SPEED = Number(process.env.NEXT_PUBLIC_DEMO_SPEED ?? 1);
+const TOTAL_LESSONS = 5; // course completion is measured out of this many lessons
 
 export function useSession() {
   const [screen, setScreen] = useState<Screen>("splash");
   const [scenarioIdx, setScenarioIdx] = useState(0);
-  const [course, setCourse] = useState(30);
+  const [course, setCourse] = useState(0); // completed lessons, out of TOTAL_LESSONS
   const [details, setDetails] = useState<IncidentDetails>(EMPTY_INCIDENT);
   const [camDenied, setCamDenied] = useState(false);
   const [signal, setSignal] = useState(96);
@@ -69,6 +70,7 @@ export function useSession() {
   const lastTraineeTurnRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const checksRef = useRef<Checks>({});
+  const completedLessonsRef = useRef<Set<number>>(new Set()); // unique lesson idxs finished
 
   const scenario = SCENARIOS[scenarioIdx];
 
@@ -83,6 +85,7 @@ export function useSession() {
   }, [stream, presage]);
 
   const conversation = useConversation({
+    volume: 1, // caller voice at max (0..1)
     onMessage: (props) => {
       if (props.role === "user") {
         lastTraineeTurnRef.current = props.message;
@@ -142,7 +145,7 @@ export function useSession() {
   const go = useCallback(
     (next: Screen) => {
       clearTimers();
-      if (next === "home" || next === "ready" || next === "console") startCam();
+      if (next === "home" || next === "ready" || next === "incoming" || next === "console") startCam();
       setScreen(next);
     },
     [clearTimers, startCam]
@@ -202,6 +205,8 @@ export function useSession() {
       conversationIdRef.current = null;
     }
     const courseFrom = course;
+    completedLessonsRef.current.add(scenarioIdx); // finishing a lesson completes it
+    const courseTo = Math.min(TOTAL_LESSONS, completedLessonsRef.current.size);
     const built = buildReport(
       seriesRef.current.map((s) => ({ ...s })),
       transcript,
@@ -209,7 +214,8 @@ export function useSession() {
       markers,
       details,
       scenario.truth,
-      courseFrom
+      courseFrom,
+      courseTo
     );
     built.responses.loading = true;
     const now = new Date();
@@ -246,15 +252,14 @@ export function useSession() {
             : { ...prev.responses, loading: false };
           const total = prev.composure.score + responses.score + prev.incident.score;
           const passed = total >= 24;
-          const courseTo = Math.min(100, prev.courseFrom + (passed ? 10 : 3));
-          setCourse(courseTo);
-          return { ...prev, responses, total, passed, courseTo };
+          // Course completion is per-lesson-finished (set in endCall), not pass/fail.
+          return { ...prev, responses, total, passed };
         });
       })
       .catch(() => {
         setReport((prev) => (prev ? { ...prev, responses: { ...prev.responses, loading: false } } : prev));
       });
-  }, [clearTimers, conversation, transcript, checks, markers, scenario, details, course]);
+  }, [clearTimers, conversation, transcript, checks, markers, scenario, scenarioIdx, details, course]);
 
   /**
    * One vitals tick, real-Presage or sim depending on what's configured.
@@ -386,21 +391,13 @@ export function useSession() {
         conversation.startSession({
           conversationToken: data.token,
           connectionType: "webrtc",
-          // Persona AND greeting come from the ElevenLabs dashboard agent — we
-          // intentionally do NOT override agent.prompt or agent.firstMessage, so
-          // the dashboard system prompt is the single source of truth. The
-          // scenario name is still passed as a dynamic variable so the dashboard
-          // prompt can reference {{scenario}} if you want per-scenario behavior.
+          // Everything about the caller — persona, greeting, voice, language —
+          // comes from the ElevenLabs dashboard agent. We send NO overrides, so
+          // this connects uniformly to every case agent without each one having
+          // to enable override permissions (that mismatch is what caused the
+          // assault/fire agents to reject the session). scenario name is passed
+          // as a dynamic variable for optional {{scenario}} use in the prompt.
           dynamicVariables: { baseline_hr: baselineHr, scenario: scenario.name },
-          overrides: {
-            agent: {
-              language: "en",
-            },
-            tts: {
-              stability: 0.3,
-              similarityBoost: 0.75,
-            },
-          },
         });
         const iv = setInterval(() => runLiveTick(), 1000 / DEMO_SPEED);
         timersRef.current.push(iv);

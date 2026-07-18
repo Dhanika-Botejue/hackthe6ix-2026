@@ -15,7 +15,7 @@ interface Lesson {
 const LESSONS: Lesson[] = [
   { cat: "assault", name: "Street assault", idx: 0, state: "active" },
   { cat: "fire", name: "House fire", idx: 1, state: "open" },
-  { cat: "medical", name: "Cardiac arrest", idx: 2, state: "open" },
+  { cat: "burglary", name: "Robbery", idx: 2, state: "open" },
   { cat: "car", name: "Highway collision", idx: null, state: "locked" },
   { cat: "burglary", name: "Break-in in progress", idx: null, state: "locked" },
   { cat: "shield", name: "Final certification", idx: null, state: "locked" },
@@ -55,22 +55,21 @@ export function Home({
   course,
   streak,
   pickScenario,
-  startCall,
+  onLaunch,
   account,
 }: {
   course: number;
   streak: number;
   pickScenario: (i: number) => void;
-  startCall: () => void;
+  onLaunch: () => void;
   account?: { label: string; href?: string; cta?: string } | null;
 }) {
   const [nav, setNav] = useState("home");
-  const lessonsDone = Math.round((course / 100) * 76);
 
   const launch = (idx: number | null) => {
     if (idx == null) return;
     pickScenario(idx);
-    startCall();
+    onLaunch();
   };
 
   const polyline = LESSONS.map((_, i) => `${XS[i]},${TOP + i * STEP}`).join(" ");
@@ -104,10 +103,10 @@ export function Home({
           <span className="text-muted" style={{ fontWeight: 700 }}>day streak</span>
         </div>
         <div className="chip" style={{ paddingLeft: 8 }}>
-          <CompletionRing pct={course} />
+          <CompletionRing pct={Math.round((course / 5) * 100)} />
           <div style={{ lineHeight: 1.1 }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Course completion</div>
-            <div className="text-muted" style={{ fontSize: 12, fontWeight: 700 }}>{lessonsDone} / 76 lessons</div>
+            <div className="text-muted" style={{ fontSize: 12, fontWeight: 700 }}>{course} / 5 lessons</div>
           </div>
         </div>
         {account && (
@@ -143,7 +142,7 @@ export function Home({
           </div>
           <button
             className="btn btn-primary"
-            onClick={startCall}
+            onClick={onLaunch}
             style={{ marginTop: 14, fontSize: 20, padding: "16px 46px", gap: 12 }}
           >
             <span style={{ fontSize: 14 }}>▶</span> Start

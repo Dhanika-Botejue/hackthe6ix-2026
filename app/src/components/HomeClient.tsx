@@ -6,11 +6,12 @@ import { useSession } from "@/hooks/useSession";
 import { LoginScreen } from "@/components/LoginScreen";
 import { Splash } from "@/components/Splash";
 import { Home } from "@/components/Home";
+import { IncomingCall } from "@/components/IncomingCall";
 import { LiveConsole } from "@/components/LiveConsole";
 import { PerformanceReview } from "@/components/PerformanceReview";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
-const STREAK = 7;
+const STREAK = 1;
 
 export function HomeClient({ user }: { user: User | null }) {
   const s = useSession();
@@ -33,9 +34,13 @@ export function HomeClient({ user }: { user: User | null }) {
           course={s.course}
           streak={STREAK}
           pickScenario={s.pickScenario}
-          startCall={s.startCall}
+          onLaunch={() => s.go("incoming")}
           account={account}
         />
+      )}
+
+      {loggedIn && s.screen === "incoming" && (
+        <IncomingCall onAnswer={s.startCall} onDecline={() => s.go("home")} />
       )}
 
       {loggedIn && s.screen === "console" && (

@@ -260,10 +260,10 @@ export function PerformanceReview({ report, scenarioName, goHome }: { report: Re
                 <span>Total Score</span><span>{total} / 30</span>
               </div>
               <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
-                <CompletionRing pct={report.courseTo} size={54} />
+                <CompletionRing pct={Math.round((report.courseTo / 5) * 100)} size={54} />
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 13 }}>Course Completion</div>
-                  <div className="text-muted" style={{ fontSize: 12 }}>{report.courseFrom}% → <b style={{ color: "var(--green)" }}>{report.courseTo}%</b></div>
+                  <div className="text-muted" style={{ fontSize: 12 }}>{report.courseFrom} / 5 → <b style={{ color: "var(--green)" }}>{report.courseTo} / 5</b> lessons</div>
                 </div>
               </div>
             </div>
