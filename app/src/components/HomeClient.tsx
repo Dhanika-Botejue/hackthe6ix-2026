@@ -33,12 +33,6 @@ export function HomeClient({ user }: { user: User | null }) {
           stream={s.stream}
           camDenied={s.camDenied}
           signal={s.signal}
-          bl={s.bl}
-          blT={s.blT}
-          blHr={s.blHr}
-          baselineHr={s.baselineHr}
-          baselineSecs={s.baselineSecs}
-          startBaseline={s.startBaseline}
           startCall={s.startCall}
           goHistory={() => s.go("history")}
           account={account}

@@ -342,11 +342,14 @@ export function useSession() {
         conversation.startSession({
           conversationToken: data.token,
           connectionType: "webrtc",
+          // Persona AND greeting come from the ElevenLabs dashboard agent — we
+          // intentionally do NOT override agent.prompt or agent.firstMessage, so
+          // the dashboard system prompt is the single source of truth. The
+          // scenario name is still passed as a dynamic variable so the dashboard
+          // prompt can reference {{scenario}} if you want per-scenario behavior.
           dynamicVariables: { baseline_hr: baselineHr, scenario: scenario.name },
           overrides: {
             agent: {
-              prompt: { prompt: scenario.systemPrompt },
-              firstMessage: scenario.firstMessage,
               language: "en",
             },
             tts: {

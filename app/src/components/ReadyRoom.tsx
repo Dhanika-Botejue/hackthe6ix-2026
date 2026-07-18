@@ -11,12 +11,6 @@ export function ReadyRoom(props: {
   stream: MediaStream | null;
   camDenied: boolean;
   signal: number;
-  bl: "idle" | "running" | "done";
-  blT: number;
-  blHr: number;
-  baselineHr: number;
-  baselineSecs: number;
-  startBaseline: () => void;
   startCall: () => void;
   goHistory: () => void;
   account?: { label: string; href?: string; cta?: string } | null;
@@ -28,18 +22,10 @@ export function ReadyRoom(props: {
     stream,
     camDenied,
     signal,
-    bl,
-    blT,
-    blHr,
-    baselineHr,
-    baselineSecs,
-    startBaseline,
     startCall,
     goHistory,
     account,
   } = props;
-
-  const ringOffset = 351.9 * (blT / baselineSecs);
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 28 }}>
@@ -70,7 +56,7 @@ export function ReadyRoom(props: {
           )}
         </div>
         <div className="text-muted" style={{ fontSize: 13, marginBottom: 20 }}>
-          Select a scenario. Capture your baseline. Take the call.
+          Select a scenario. Take the call.
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 22 }}>
@@ -149,78 +135,18 @@ export function ReadyRoom(props: {
               </div>
             </>
           )}
-
-          {bl === "running" && (
-            <div style={{ position: "absolute", right: 18, top: 18, width: 132, textAlign: "center" }}>
-              <svg width="132" height="132" viewBox="0 0 132 132">
-                <circle cx="66" cy="66" r="56" fill="rgba(29,31,32,.55)" stroke="rgba(255,255,255,.18)" strokeWidth="2" />
-                <circle
-                  cx="66"
-                  cy="66"
-                  r="56"
-                  fill="none"
-                  stroke="var(--color-accent-300)"
-                  strokeWidth="3"
-                  strokeDasharray="351.9"
-                  strokeDashoffset={ringOffset}
-                  transform="rotate(-90 66 66)"
-                  style={{ transition: "stroke-dashoffset 1s linear" }}
-                />
-                <text x="66" y="60" textAnchor="middle" fill="#fff" fontFamily="Barlow Condensed" fontSize="34" fontWeight="600">
-                  {blHr}
-                </text>
-                <text x="66" y="78" textAnchor="middle" fill="var(--color-accent-300)" fontSize="10" letterSpacing="2">
-                  BPM
-                </text>
-                <text x="66" y="96" textAnchor="middle" fill="rgba(255,255,255,.6)" fontSize="11">
-                  {blT}s
-                </text>
-              </svg>
-            </div>
-          )}
         </Blueprint>
 
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 16 }}>
           <div style={{ flex: 1 }}>
-            {bl === "idle" && (
-              <>
-                <div style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 16 }}>Baseline capture</div>
-                <div className="text-muted" style={{ fontSize: 13 }}>
-                  Sit still, breathing normally. {baselineSecs} seconds.
-                </div>
-              </>
-            )}
-            {bl === "running" && (
-              <>
-                <div style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 16, animation: "cbPulse 2s infinite" }}>
-                  Reading baseline…
-                </div>
-                <div className="text-muted" style={{ fontSize: 13 }}>
-                  Sit still, breathing normally.
-                </div>
-              </>
-            )}
-            {bl === "done" && (
-              <>
-                <div style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 16, color: "var(--color-accent-700)" }}>
-                  Baseline {baselineHr} bpm — locked
-                </div>
-                <div className="text-muted" style={{ fontSize: 13 }}>
-                  The caller will react to how you handle yourself.
-                </div>
-              </>
-            )}
+            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 16 }}>Ready when you are</div>
+            <div className="text-muted" style={{ fontSize: 13 }}>
+              The caller will react to how you handle yourself. Pick up when you&apos;re set.
+            </div>
           </div>
-          {bl !== "done" && (
-            <button className="btn btn-secondary" disabled={bl === "running"} onClick={startBaseline} style={{ minWidth: 170 }}>
-              Capture baseline
-            </button>
-          )}
-          {bl === "done" && (
-            <button className="btn btn-primary" onClick={startCall} style={{ minWidth: 170, fontSize: 15, padding: "10px 18px" }}>
-              Take the call
-            </button>
-          )}
+          <button className="btn btn-primary" onClick={startCall} style={{ minWidth: 170, fontSize: 15, padding: "10px 18px" }}>
+            Take the call
+          </button>
         </div>
       </Blueprint>
     </div>
