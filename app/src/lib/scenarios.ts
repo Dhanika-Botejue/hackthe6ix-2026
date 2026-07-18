@@ -129,7 +129,7 @@ export const SCENARIOS: ScenarioConfig[] = [
     truth: {
       location: { correct: "30 Twenty-Seventh Street", accept: ["twenty-seventh", "twenty seventh", "27th", "30 27"] },
       nature: { correct: "House fire", value: "Fire" },
-      safe: { correct: "—", na: true },
+      safe: { correct: "Yes", value: "yes" },
       count: { correct: "2", accept: ["2", "two"] },
       relationship: { correct: "—", na: true },
       suspect: { correct: "N/A", na: true },

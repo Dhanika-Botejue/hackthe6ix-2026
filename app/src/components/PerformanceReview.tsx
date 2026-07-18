@@ -212,25 +212,11 @@ export function PerformanceReview({
                   </div>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 14 }}>
-                <div className="card card-pad">
-                  <div style={{ fontWeight: 800, marginBottom: 8 }}>Composure Over Time</div>
-                  <ComposureChart report={report} />
-                </div>
-                <div className="card card-pad" style={{ gap: 11, display: "flex", flexDirection: "column" }}>
-                  <div style={{ fontWeight: 800 }}>Vitals Summary</div>
-                  {([
-                    ["heart", "var(--red)", "Avg Heart Rate", `${avgHr} BPM`],
-                    ["lungs", "var(--blue-2)", "Avg Breathing", `${avgBr} /min`],
-                    ["bolt", "var(--amber)", "Avg Stress", stressLabel],
-                    ["emotion", "var(--purple)", "Most Common Emotion", emotion],
-                  ] as [IconName, string, string, string][]).map(([ic, col, label, val], i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <IconBadge name={ic} color={col} size={30} icon={16} />
-                      <span className="text-muted" style={{ fontSize: 13, flex: 1 }}>{label}</span>
-                      <span style={{ fontWeight: 800, fontSize: 13 }}>{val}</span>
-                    </div>
-                  ))}
+              <div className="card card-pad" style={{ textAlign: "center" }}>
+                <div className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>Lowest Composure</div>
+                <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 38, color: composure.dippedBelow50 ? "var(--red)" : "var(--amber)" }}>{composure.low}%</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: composure.dippedBelow50 ? "var(--red)" : "var(--muted)" }}>
+                  {composure.dippedBelow50 ? "Dropped below 50% at some point" : "Did not drop below 50%"}
                 </div>
               </div>
             </div>
