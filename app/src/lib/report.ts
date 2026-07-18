@@ -29,7 +29,8 @@ export function buildReport(
   markers: Marker[],
   details: IncidentDetails,
   truth: IncidentTruth,
-  courseFrom: number
+  courseFrom: number,
+  courseTo: number
 ): Report {
   const dur = series.length ? series[series.length - 1].t : 0;
   const peak = series.length ? Math.max(...series.map((p) => p.hr)) : 0;
@@ -47,7 +48,6 @@ export function buildReport(
   const incident = gradeIncident(details, truth);
   const total = composure.score + responses.score + incident.score;
   const passed = total >= PASS_THRESHOLD;
-  const courseTo = Math.min(100, courseFrom + (passed ? 10 : 3));
 
   return {
     transcript,
