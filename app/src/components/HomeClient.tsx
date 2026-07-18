@@ -4,12 +4,13 @@ import { useState } from "react";
 import type { User } from "@auth0/nextjs-auth0/types";
 import { useSession } from "@/hooks/useSession";
 import { LoginScreen } from "@/components/LoginScreen";
-import { ReadyRoom } from "@/components/ReadyRoom";
+import { Splash } from "@/components/Splash";
+import { Home } from "@/components/Home";
 import { LiveConsole } from "@/components/LiveConsole";
-import { ReportScreen } from "@/components/ReportScreen";
-import { HistoryScreen } from "@/components/HistoryScreen";
+import { PerformanceReview } from "@/components/PerformanceReview";
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+const STREAK = 7;
 
 export function HomeClient({ user }: { user: User | null }) {
   const s = useSession();
@@ -22,19 +23,17 @@ export function HomeClient({ user }: { user: User | null }) {
       : null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}>
+    <div style={{ minHeight: "100vh", color: "var(--text)" }}>
       {!loggedIn && <LoginScreen onDemo={() => setGuest(true)} />}
 
-      {loggedIn && s.screen === "ready" && (
-        <ReadyRoom
-          scenarios={s.scenarios}
-          scenarioIdx={s.scenarioIdx}
+      {loggedIn && s.screen === "splash" && <Splash onDone={() => s.go("home")} />}
+
+      {loggedIn && (s.screen === "home" || s.screen === "ready") && (
+        <Home
+          course={s.course}
+          streak={STREAK}
           pickScenario={s.pickScenario}
-          stream={s.stream}
-          camDenied={s.camDenied}
-          signal={s.signal}
           startCall={s.startCall}
-          goHistory={() => s.go("history")}
           account={account}
         />
       )}
@@ -49,30 +48,21 @@ export function HomeClient({ user }: { user: User | null }) {
           band={s.band}
           baselineHr={s.baselineHr}
           callT={s.callT}
-          callerTitle="Unknown caller"
           scenarioName={s.scenario.name}
-          callerState={s.callerState}
+          difficulty={s.scenario.difficulty}
+          course={s.course}
+          streak={STREAK}
           callOver={s.callOver}
-          copilot={s.copilot}
-          brief={s.brief}
           transcript={s.transcript}
           liveNotice={s.liveNotice}
+          details={s.details}
+          setField={s.setField}
           onEndCall={s.endCall}
         />
       )}
 
       {loggedIn && s.screen === "report" && s.report && (
-        <ReportScreen
-          report={s.report}
-          baselineHr={s.baselineHr}
-          scenarioName={s.scenario.name}
-          goReady={() => s.go("ready")}
-          goHistory={() => s.go("history")}
-        />
-      )}
-
-      {loggedIn && s.screen === "history" && (
-        <HistoryScreen sessions={s.sessions} goReady={() => s.go("ready")} />
+        <PerformanceReview report={s.report} scenarioName={s.scenario.name} goHome={() => s.go("home")} />
       )}
     </div>
   );

@@ -41,17 +41,97 @@ export interface TimelineEvent {
   end?: boolean;
 }
 
+export type ScenarioCategory =
+  | "phone"
+  | "fire"
+  | "car"
+  | "medical"
+  | "burglary"
+  | "assault"
+  | "shield";
+
 export interface ScenarioConfig {
   id: string;
   n: number;
   name: string;
   desc: string;
   diff: "STANDARD" | "HIGH" | "SEVERE";
+  /** 1-5, drives the difficulty meter in the call top bar. */
+  difficulty: number;
+  category: ScenarioCategory;
   tagClass: string;
   timeline: TimelineEvent[];
   firstMessage: string;
   /** Persona prompt sent as an `overrides.agent.prompt` at startSession — see PRD §6.1. */
   systemPrompt: string;
+  /** Answer key for grading the Incident Details form after the call. */
+  truth: IncidentTruth;
+}
+
+/* ── Incident Details form (filled by the trainee during the call) ── */
+export type SafeAnswer = "" | "yes" | "no" | "unsure";
+
+export interface IncidentDetails {
+  callback: string;
+  location: string;
+  nature: string;
+  safe: SafeAnswer;
+  count: string;
+  relationship: string;
+  suspect: string;
+  hazards: string;
+  special: string;
+}
+
+export const EMPTY_INCIDENT: IncidentDetails = {
+  callback: "",
+  location: "",
+  nature: "",
+  safe: "",
+  count: "",
+  relationship: "",
+  suspect: "",
+  hazards: "",
+  special: "",
+};
+
+/** Per-field answer key. `na` fields render as a dash and aren't scored. */
+export interface FieldTruth {
+  correct: string;
+  /** exact expected value (selects / yes-no-unsure) */
+  value?: string;
+  /** accepted substrings for free-text fields (case-insensitive) */
+  accept?: string[];
+  na?: boolean;
+}
+export type IncidentTruth = Record<keyof IncidentDetails, FieldTruth>;
+
+export type FieldVerdict = "correct" | "wrong" | "na";
+export interface IncidentRow {
+  key: keyof IncidentDetails;
+  label: string;
+  your: string;
+  correct: string;
+  verdict: FieldVerdict;
+}
+export interface IncidentGrade {
+  score: number; // /10
+  rows: IncidentRow[];
+}
+
+export interface ResponsesGrade {
+  score: number; // /10
+  good: string[];
+  improve: string[];
+  loading?: boolean;
+}
+
+export interface ComposureGrade {
+  score: number; // /10 (0 if it ever dropped below 50)
+  avg: number;
+  low: number;
+  lowT: number;
+  dippedBelow50: boolean;
 }
 
 export interface Report {
@@ -66,6 +146,14 @@ export interface Report {
   recSecs: number;
   perfScore: number;
   feedback: string;
+  /* dispatchlingo grading */
+  composure: ComposureGrade;
+  responses: ResponsesGrade;
+  incident: IncidentGrade;
+  total: number; // /30
+  passed: boolean;
+  courseFrom: number; // % before this call
+  courseTo: number; // % after
 }
 
 export interface SessionRow {

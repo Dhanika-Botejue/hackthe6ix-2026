@@ -1,19 +1,35 @@
-import { mmss } from "./composure";
-import { CHECK_DEF } from "./scenarios";
-import type { Checks, Marker, Report, TranscriptLine, VitalsTick } from "./types";
+import { mmss, clamp } from "./composure";
+import { gradeIncident } from "./incident";
+import type {
+  Checks,
+  ComposureGrade,
+  IncidentDetails,
+  IncidentTruth,
+  Marker,
+  Report,
+  ResponsesGrade,
+  TranscriptLine,
+  VitalsTick,
+} from "./types";
+
+const PASS_THRESHOLD = 24; // 80% of 30
 
 /**
- * Deterministic scoring (PRD §6.7): checklist hits/misses, peak HR, time in
- * red, and recovery time (ticks from the worst composure moment to the
- * first tick back at >=55). The coach-feedback line is a template keyed on
- * the worst miss for now — swap for the Backboard scorer agent's line when
- * that's wired (P1).
+ * Builds the after-action report. Three graded pillars (each /10):
+ *   1. Composure — average composure across the call; an automatic 0 if it
+ *      ever dropped below 50 (PRD scoring rule).
+ *   2. Responses — communication / decision-making (heuristic here; upgraded
+ *      by the Gemini grader in /api/grade when a key is configured).
+ *   3. Incident details — accuracy of the form the trainee filled in.
  */
 export function buildReport(
   series: VitalsTick[],
   transcript: TranscriptLine[],
   checks: Checks,
-  markers: Marker[]
+  markers: Marker[],
+  details: IncidentDetails,
+  truth: IncidentTruth,
+  courseFrom: number
 ): Report {
   const dur = series.length ? series[series.length - 1].t : 0;
   const peak = series.length ? Math.max(...series.map((p) => p.hr)) : 0;
@@ -26,7 +42,12 @@ export function buildReport(
   const recI = series.findIndex((p, i) => i > minI && p.comp >= 55);
   const recSecs = series.length ? (recI < 0 ? dur - series[minI].t : series[recI].t - series[minI].t) : 0;
 
-  const perfScore = Object.keys(checks).length;
+  const composure = gradeComposure(series);
+  const responses = heuristicResponses(checks, transcript);
+  const incident = gradeIncident(details, truth);
+  const total = composure.score + responses.score + incident.score;
+  const passed = total >= PASS_THRESHOLD;
+  const courseTo = Math.min(100, courseFrom + (passed ? 10 : 3));
 
   return {
     transcript,
@@ -38,76 +59,89 @@ export function buildReport(
     peak,
     redSecs,
     recSecs,
-    perfScore,
-    feedback: feedbackFor(checks),
+    perfScore: incident.score,
+    feedback: responses.improve[0] ?? "Solid work — keep drilling.",
+    composure,
+    responses,
+    incident,
+    total,
+    passed,
+    courseFrom,
+    courseTo,
   };
 }
 
-function feedbackFor(checks: Checks): string {
-  if (checks.location === undefined) {
-    return "You never confirmed the address. Nothing else matters until dispatch knows where to send help — ask for the location before anything else.";
-  }
-  if (checks.safety === undefined) {
-    return "Scene safety was never addressed. A caller who doesn't feel safe can't focus on your questions — get them somewhere safe as soon as a threat appears.";
-  }
-  if (checks.nature === undefined) {
-    return "The nature of the emergency was never pinned down. Confirm what's actually happening as soon as the address is locked in.";
-  }
-  if (checks.breathing === undefined) {
-    return "Breathing status was never confirmed. That single fact changes everything responders do on arrival — always close the loop on it.";
-  }
-  return "You asked three questions before getting the address. The caller was too panicked to process multiple questions. Short single questions recover a panicking caller faster.";
-}
-
-export interface ChartGeometry {
-  hrPath: string;
-  baselinePath: string;
-  bands: { x: number; w: number; band: string }[];
-  markers: { x: number; tx: number; anchor: "start" | "end"; label: string }[];
-}
-
-const CHART_W = 1000;
-const CHART_H = 240;
-
-export function buildChartGeometry(report: Report, baselineHr: number): ChartGeometry {
-  const dur = Math.max(1, report.durSecs);
-  const x = (t: number) => (t / dur) * CHART_W;
-  const y = (hr: number) => CHART_H - ((hr - 60) / 70) * 220;
-
-  const hrPath = report.series
-    .map((p, i) => (i ? "L" : "M") + x(p.t).toFixed(1) + " " + y(p.hr).toFixed(1))
-    .join(" ");
-  const baselinePath = `M0 ${y(baselineHr).toFixed(1)} L${CHART_W} ${y(baselineHr).toFixed(1)}`;
-
-  const bands: { band: string; start: number; end: number }[] = [];
-  report.series.forEach((p) => {
-    const last = bands[bands.length - 1];
-    if (last && last.band === p.band) last.end = p.t;
-    else bands.push({ band: p.band, start: p.t - 1, end: p.t });
+export function gradeComposure(series: VitalsTick[]): ComposureGrade {
+  if (!series.length) return { score: 10, avg: 100, low: 100, lowT: 0, dippedBelow50: false };
+  const avg = Math.round(series.reduce((a, p) => a + p.comp, 0) / series.length);
+  let low = series[0].comp;
+  let lowT = series[0].t;
+  series.forEach((p) => {
+    if (p.comp < low) {
+      low = p.comp;
+      lowT = p.t;
+    }
   });
+  const dipped = low < 50;
+  const score = dipped ? 0 : clamp(Math.round(avg / 10), 0, 10);
+  return { score, avg, low, lowT, dippedBelow50: dipped };
+}
 
-  const markers = report.markers.map((m) => {
-    const mx = x(m.t);
-    const right = mx > CHART_W - 140;
-    return {
-      x: mx,
-      tx: right ? mx - 6 : mx + 6,
-      anchor: (right ? "end" : "start") as "start" | "end",
-      label: m.label,
-    };
+/** Fallback responses grade — used until the LLM grader responds (or always,
+ *  if no GEMINI_API_KEY is configured). */
+export function heuristicResponses(checks: Checks, transcript: TranscriptLine[]): ResponsesGrade {
+  const good: string[] = [];
+  const improve: string[] = [];
+  const you = transcript.filter((l) => l.who === "YOU");
+
+  if (checks.location !== undefined) good.push("You asked for the location early in the call.");
+  else improve.push("You never locked in the address — get the location before anything else.");
+
+  if (checks.safety !== undefined) good.push("You confirmed the caller's safety.");
+  else improve.push("You should have checked whether the caller was safe, and re-checked it.");
+
+  if (checks.nature !== undefined) good.push("You established the nature of the emergency.");
+  else improve.push("Pin down what's actually happening once the address is set.");
+
+  if (you.length >= 3) good.push("You kept the caller engaged with clear, professional language.");
+  if (checks.breathing === undefined) improve.push("Confirm breathing status — it changes what responders do on arrival.");
+  improve.push("Ask for a callback number earlier in case the line drops.");
+
+  const hits = [checks.location, checks.safety, checks.nature, checks.breathing].filter((v) => v !== undefined).length;
+  const score = clamp(4 + hits * 1.5, 0, 10);
+  return { score: Math.round(score), good: good.slice(0, 4), improve: improve.slice(0, 3) };
+}
+
+/* ── composure-over-time chart geometry (review Composure step) ── */
+export interface CompChart {
+  path: string;
+  area: string;
+  low: { x: number; y: number; t: number; v: number };
+  w: number;
+  h: number;
+  midY: number;
+}
+
+export function buildComposureChart(series: VitalsTick[], w = 640, h = 220): CompChart {
+  const dur = Math.max(1, series.length ? series[series.length - 1].t : 1);
+  const x = (t: number) => (t / dur) * w;
+  const y = (c: number) => h - (clamp(c, 0, 100) / 100) * h;
+
+  const pts = series.length ? series : [{ t: 0, comp: 100, hr: 0, br: 0, band: "green" as const }];
+  const path = pts.map((p, i) => (i ? "L" : "M") + x(p.t).toFixed(1) + " " + y(p.comp).toFixed(1)).join(" ");
+  const area = `${path} L${x(pts[pts.length - 1].t).toFixed(1)} ${h} L0 ${h} Z`;
+
+  let low = pts[0];
+  pts.forEach((p) => {
+    if (p.comp < low.comp) low = p;
   });
 
   return {
-    hrPath,
-    baselinePath,
-    bands: bands.map((b) => ({ x: x(b.start), w: x(b.end) - x(b.start), band: b.band })),
-    markers,
+    path,
+    area,
+    low: { x: x(low.t), y: y(low.comp), t: low.t, v: low.comp },
+    w,
+    h,
+    midY: y(50),
   };
-}
-
-export function checklistRows(checks: Checks) {
-  return CHECK_DEF.map((c) => {
-    const hit = checks[c.key] !== undefined;
-    return { label: c.label, hit, time: hit ? mmss(checks[c.key] as number) : "missed" };
-  });
 }

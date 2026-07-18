@@ -16,9 +16,10 @@ import {
   type VitalsSimState,
 } from "@/lib/vitals-sim";
 import { usePresageVitals, type PresageLatest } from "@/hooks/usePresageVitals";
-import type { Band, Brief, Checks, Marker, Report, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
+import { EMPTY_INCIDENT } from "@/lib/types";
+import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
 
-export type Screen = "login" | "ready" | "console" | "report" | "history";
+export type Screen = "splash" | "home" | "ready" | "console" | "report" | "history";
 type BaselineState = "idle" | "running" | "done";
 type CallMode = "sim" | "live" | null;
 
@@ -26,8 +27,10 @@ const BASELINE_SECS = Number(process.env.NEXT_PUBLIC_BASELINE_SECONDS ?? 15);
 const DEMO_SPEED = Number(process.env.NEXT_PUBLIC_DEMO_SPEED ?? 1);
 
 export function useSession() {
-  const [screen, setScreen] = useState<Screen>("ready");
+  const [screen, setScreen] = useState<Screen>("splash");
   const [scenarioIdx, setScenarioIdx] = useState(0);
+  const [course, setCourse] = useState(30);
+  const [details, setDetails] = useState<IncidentDetails>(EMPTY_INCIDENT);
   const [camDenied, setCamDenied] = useState(false);
   const [signal, setSignal] = useState(96);
 
@@ -139,10 +142,15 @@ export function useSession() {
   const go = useCallback(
     (next: Screen) => {
       clearTimers();
-      if (next === "ready" || next === "console") startCam();
+      if (next === "home" || next === "ready" || next === "console") startCam();
       setScreen(next);
     },
     [clearTimers, startCam]
+  );
+
+  const setField = useCallback(
+    (k: keyof IncidentDetails, v: string) => setDetails((prev) => ({ ...prev, [k]: v })),
+    []
   );
 
   function pushTurn(who: "CALLER" | "YOU", text: string) {
@@ -193,7 +201,17 @@ export function useSession() {
       conversation.endSession();
       conversationIdRef.current = null;
     }
-    const built = buildReport(seriesRef.current.map((s) => ({ ...s })), transcript, checks, markers);
+    const courseFrom = course;
+    const built = buildReport(
+      seriesRef.current.map((s) => ({ ...s })),
+      transcript,
+      checks,
+      markers,
+      details,
+      scenario.truth,
+      courseFrom
+    );
+    built.responses.loading = true;
     const now = new Date();
     const row: SessionRow = {
       date:
@@ -201,7 +219,7 @@ export function useSession() {
         " · " +
         now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
       scenario: scenario.name,
-      perf: built.perfScore + " / 5",
+      perf: built.total + " / 30",
       peak: built.peak,
       red: mmssLocal(built.redSecs),
       rec: built.recSecs + "s",
@@ -210,8 +228,33 @@ export function useSession() {
     };
     setSessions((prev) => [...prev, row]);
     setReport(built);
+    setCourse(built.courseTo);
     setScreen("report");
-  }, [clearTimers, conversation, transcript, checks, markers, scenario]);
+
+    // Upgrade the Responses pillar with the LLM grader if configured.
+    fetch("/api/grade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario: scenario.name, transcript }),
+    })
+      .then((r) => (r.status === 204 ? null : r.json()))
+      .then((g: ResponsesGrade | null) => {
+        setReport((prev) => {
+          if (!prev) return prev;
+          const responses: ResponsesGrade = g
+            ? { score: g.score, good: g.good, improve: g.improve, loading: false }
+            : { ...prev.responses, loading: false };
+          const total = prev.composure.score + responses.score + prev.incident.score;
+          const passed = total >= 24;
+          const courseTo = Math.min(100, prev.courseFrom + (passed ? 10 : 3));
+          setCourse(courseTo);
+          return { ...prev, responses, total, passed, courseTo };
+        });
+      })
+      .catch(() => {
+        setReport((prev) => (prev ? { ...prev, responses: { ...prev.responses, loading: false } } : prev));
+      });
+  }, [clearTimers, conversation, transcript, checks, markers, scenario, details, course]);
 
   /**
    * One vitals tick, real-Presage or sim depending on what's configured.
@@ -325,6 +368,7 @@ export function useSession() {
     setCallerState("RINGING");
     setCallOver(false);
     setLiveNotice(null);
+    setDetails(EMPTY_INCIDENT);
     clearTimers();
     go("console");
 
@@ -386,6 +430,9 @@ export function useSession() {
     scenarioIdx,
     pickScenario,
     scenarios: SCENARIOS,
+    course,
+    details,
+    setField,
     stream,
     camDenied,
     signal,

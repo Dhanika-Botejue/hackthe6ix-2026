@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Codeblue — Dispatch training simulator",
-  description: "A real-time, high-stakes 911 dispatcher conversation trainer.",
+  title: "dispatchlingo — Duolingo for dispatchers",
+  description: "Train to run a 911 emergency line: stay calm, get the facts, save lives.",
 };
 
 export default function RootLayout({
