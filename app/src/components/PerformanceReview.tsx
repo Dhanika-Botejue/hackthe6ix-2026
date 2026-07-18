@@ -14,7 +14,7 @@ const STEP_ICONS: IconName[] = ["chart", "heart", "mic", "pin", "trophy"];
 
 function Stepper({ step }: { step: number }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 26 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 16, flex: "none" }}>
       {STEPS.map((label, i) => {
         const done = i < step;
         const on = i === step;
@@ -63,7 +63,7 @@ function ScoreBadge({ score }: { score: number }) {
 /** Section heading — icon badge + title + score card, shared across the review steps. */
 function StepHeading({ icon, color, title, sub, score }: { icon: IconName; color: string; title: string; sub: string; score: number }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 18 }}>
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 12 }}>
       <div style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
         <IconBadge name={icon} color={color} size={44} icon={22} />
         <div>
@@ -77,9 +77,9 @@ function StepHeading({ icon, color, title, sub, score }: { icon: IconName; color
 }
 
 function ComposureChart({ report }: { report: Report }) {
-  const g = buildComposureChart(report.series, 620, 200);
+  const g = buildComposureChart(report.series, 620, 150);
   return (
-    <svg viewBox={`0 0 ${g.w} ${g.h}`} style={{ width: "100%", height: 200, display: "block" }}>
+    <svg viewBox={`0 0 ${g.w} ${g.h}`} style={{ width: "100%", height: 150, display: "block" }}>
       <defs>
         <linearGradient id="compFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="rgba(88,204,2,0.35)" />
@@ -133,7 +133,7 @@ export function PerformanceReview({
   const back = () => setStep((s) => Math.max(0, s - 1));
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       {/* top bar — same chrome as the live console */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "8px 18px", borderBottom: "1px solid var(--border)", background: "rgba(6,10,20,0.7)", position: "sticky", top: 0, zIndex: 5, backdropFilter: "blur(8px)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -160,7 +160,7 @@ export function PerformanceReview({
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "24px 24px 20px", maxWidth: 900, margin: "0 auto", width: "100%" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "14px 24px", maxWidth: 900, margin: "0 auto", width: "100%" }}>
         <Stepper step={step} />
 
         <div
@@ -168,6 +168,8 @@ export function PerformanceReview({
           className="anim-fadeup"
           style={{
             flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
             display: "flex",
             flexDirection: "column",
             justifyContent: step === 0 || step === 4 ? "center" : "flex-start",
@@ -199,25 +201,25 @@ export function PerformanceReview({
                 sub="How well you stayed calm under pressure, measured from your live vitals."
                 score={composure.score}
               />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-                <div className="card card-pad" style={{ textAlign: "center" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div className="card card-pad-sm" style={{ textAlign: "center" }}>
                   <div className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>Average Composure</div>
-                  <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 38, color: "var(--green)" }}>{composure.avg}%</div>
+                  <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 30, color: "var(--green)" }}>{composure.avg}%</div>
                 </div>
-                <div className="card card-pad" style={{ textAlign: "center" }}>
+                <div className="card card-pad-sm" style={{ textAlign: "center" }}>
                   <div className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>Lowest Composure</div>
-                  <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 38, color: composure.dippedBelow50 ? "var(--red)" : "var(--amber)" }}>{composure.low}%</div>
+                  <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 30, color: composure.dippedBelow50 ? "var(--red)" : "var(--amber)" }}>{composure.low}%</div>
                   <div style={{ fontSize: 11, fontWeight: 800, color: composure.dippedBelow50 ? "var(--red)" : "var(--muted)" }}>
                     {composure.dippedBelow50 ? "Dropped below 50% → auto 0" : "Did not drop below 50%"}
                   </div>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 14 }}>
-                <div className="card card-pad">
-                  <div style={{ fontWeight: 800, marginBottom: 8 }}>Composure Over Time</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 12 }}>
+                <div className="card card-pad-sm">
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Composure Over Time</div>
                   <ComposureChart report={report} />
                 </div>
-                <div className="card card-pad" style={{ gap: 11, display: "flex", flexDirection: "column" }}>
+                <div className="card card-pad-sm" style={{ gap: 9, display: "flex", flexDirection: "column" }}>
                   <div style={{ fontWeight: 800 }}>Vitals Summary</div>
                   {([
                     ["heart", "var(--red)", "Avg Heart Rate", `${avgHr} BPM`],
@@ -226,7 +228,7 @@ export function PerformanceReview({
                     ["emotion", "var(--purple)", "Most Common Emotion", emotion],
                   ] as [IconName, string, string, string][]).map(([ic, col, label, val], i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <IconBadge name={ic} color={col} size={30} icon={16} />
+                      <IconBadge name={ic} color={col} size={28} icon={15} />
                       <span className="text-muted" style={{ fontSize: 13, flex: 1 }}>{label}</span>
                       <span style={{ fontWeight: 800, fontSize: 13 }}>{val}</span>
                     </div>
@@ -283,12 +285,12 @@ export function PerformanceReview({
                 sub="How accurate the information you collected was."
                 score={incident.score}
               />
-              <div className="card card-pad">
-                <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 40px", gap: 8, fontSize: 10, fontWeight: 800, letterSpacing: ".08em", color: "var(--muted)", paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+              <div className="card" style={{ padding: "6px 16px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 40px", gap: 8, fontSize: 10, fontWeight: 800, letterSpacing: ".08em", color: "var(--muted)", paddingBottom: 7, borderBottom: "1px solid var(--border)" }}>
                   <span>FIELD</span><span>YOUR ANSWER</span><span>CORRECT ANSWER</span><span style={{ textAlign: "right" }}>✓</span>
                 </div>
                 {incident.rows.map((r) => (
-                  <div key={r.key} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 40px", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                  <div key={r.key} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 40px", gap: 8, alignItems: "center", padding: "6.5px 0", borderBottom: "1px solid var(--border)", fontSize: 12.5 }}>
                     <span style={{ fontWeight: 700 }}>{r.label}</span>
                     <span style={{ color: r.verdict === "wrong" ? "var(--red)" : "var(--text)", fontWeight: 700 }}>{r.your}</span>
                     <span className="text-muted" style={{ fontWeight: 700 }}>{r.correct}</span>
@@ -353,7 +355,7 @@ export function PerformanceReview({
         </div>
 
         {/* footer nav — previous · step pager · next */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 26 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, flex: "none" }}>
           <button className="btn btn-ghost" onClick={step === 0 ? goHome : back} style={{ gap: 8 }}>
             <Icon name="chevron" size={15} style={{ transform: "rotate(180deg)" }} />
             {step === 0 ? "Exit Review" : "Previous"}

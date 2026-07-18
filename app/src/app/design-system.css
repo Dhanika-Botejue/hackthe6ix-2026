@@ -106,6 +106,16 @@ h1, h2, h3, h4, h5 {
   box-shadow: var(--shadow-sm);
 }
 .card-pad { padding: 18px; }
+.card-pad-sm { padding: 12px; }
+
+/* Compact form controls — scoped to the live-call incident panel so the whole
+   form fits a short viewport without scrolling. Does not affect global inputs. */
+.compact-form .field-label { margin-bottom: 3px; font-size: 12px; }
+.compact-form .input,
+.compact-form .select,
+.compact-form textarea.input { padding: 7px 11px; font-size: 13px; border-radius: 10px; }
+.compact-form .seg-btn { padding: 7px 6px; font-size: 12px; }
+.compact-form .btn { padding: 9px 16px; }
 
 /* — pills / chips — */
 .chip {
