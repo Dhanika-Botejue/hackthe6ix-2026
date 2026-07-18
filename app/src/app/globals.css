@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap');
+@import "tailwindcss";
+@import "./design-system.css";
+
+html, body {
+  height: 100%;
+}
+
+a { color: var(--color-accent); }
+a:hover { color: var(--color-accent-700); }
+
+@keyframes cbPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes cbDrift {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(4px, -3px); }
+  65% { transform: translate(-3px, 2px); }
+}
+@keyframes cbRing {
+  from { transform: scale(1); opacity: 0.7; }
+  to { transform: scale(1.6); opacity: 0; }
+}
+
+details.cb-tr > summary {
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  list-style: none;
+}
+details.cb-tr > summary::before { content: "+ "; }
+details.cb-tr[open] > summary::before { content: "\2212 "; }
+
+video::-webkit-media-controls { display: none; }
