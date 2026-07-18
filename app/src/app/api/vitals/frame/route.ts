@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pushFrame, presageConfigured } from "@/lib/presage-server";
-import { PixelFormat } from "@smartspectra/node-sdk";
 
 export const runtime = "nodejs";
 
@@ -27,6 +26,6 @@ export async function POST(req: NextRequest) {
   const arrayBuffer = await req.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const accepted = pushFrame(sessionId, buffer, width, height, tsUs, PixelFormat.kRGB);
+  const accepted = await pushFrame(sessionId, buffer, width, height, tsUs);
   return NextResponse.json({ ok: accepted });
 }

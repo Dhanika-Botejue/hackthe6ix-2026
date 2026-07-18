@@ -1,14 +1,5 @@
 import "server-only";
-import {
-  SmartSpectraSDK,
-  PixelFormat,
-  FrameTransform,
-  breathingMetrics,
-  cardioMetrics,
-  faceMetrics,
-  type PixelFormatValue,
-} from "@smartspectra/node-sdk";
-import { decodeMetrics } from "@smartspectra/node-sdk/messages";
+import type { PixelFormatValue } from "@smartspectra/node-sdk";
 
 /**
  * Server-side Presage SmartSpectra session manager (PRD §6.2, §14 open
@@ -20,10 +11,41 @@ import { decodeMetrics } from "@smartspectra/node-sdk/messages";
  * or a Node-runtime deployment with instance reuse) — not on a
  * cold-start-per-request serverless platform.
  *
- * Falls back cleanly: getOrCreateSession() returns null when
- * PRESAGE_API_KEY isn't set, and every route treats that as "sim mode" —
- * see /api/vitals/status.
+ * Falls back cleanly on two axes:
+ *   1. No PRESAGE_API_KEY  → getOrCreateSession() returns null (sim mode).
+ *   2. Native SDK can't load (e.g. an unsupported platform — the SDK ships
+ *      binaries only for darwin-arm64/linux-x64/linux-arm64/win32-x64, so
+ *      an Intel Mac has no runtime) → loadModules() returns null and every
+ *      caller degrades to sim mode instead of crashing.
+ * The native package is imported lazily (never at module load) so /api/vitals/status
+ * and the sim path never touch it — otherwise an eager top-level import throws
+ * on unsupported platforms before any key/status check can run.
  */
+
+type SdkModule = typeof import("@smartspectra/node-sdk");
+type MessagesModule = typeof import("@smartspectra/node-sdk/messages");
+type SmartSpectraInstance = InstanceType<SdkModule["SmartSpectraSDK"]>;
+
+let modulesPromise: Promise<{ sdk: SdkModule; messages: MessagesModule } | null> | null = null;
+
+/** Lazily load the native SDK once. Returns null (and warns) if it can't load. */
+async function loadModules(): Promise<{ sdk: SdkModule; messages: MessagesModule } | null> {
+  if (!modulesPromise) {
+    modulesPromise = Promise.all([
+      import("@smartspectra/node-sdk"),
+      import("@smartspectra/node-sdk/messages"),
+    ])
+      .then(([sdk, messages]) => ({ sdk, messages }))
+      .catch((err: unknown) => {
+        console.warn(
+          "[presage] native SmartSpectra SDK unavailable — falling back to simulated vitals:",
+          err instanceof Error ? err.message : err
+        );
+        return null;
+      });
+  }
+  return modulesPromise;
+}
 
 export interface LatestVitals {
   pulseRate?: number;
@@ -36,7 +58,7 @@ export interface LatestVitals {
 }
 
 interface PresageSession {
-  sdk: SmartSpectraSDK;
+  sdk: SmartSpectraInstance;
   latest: LatestVitals;
   lastFrameAt: number;
 }
@@ -89,12 +111,17 @@ function faceTensionFromExpression(expression: unknown): number | undefined {
   return Math.max(0, Math.min(1, tension));
 }
 
-export function getOrCreateSession(sessionId: string): PresageSession | null {
+export async function getOrCreateSession(sessionId: string): Promise<PresageSession | null> {
   const apiKey = process.env.PRESAGE_API_KEY;
   if (!apiKey) return null;
 
   const existing = sessions().get(sessionId);
   if (existing) return existing;
+
+  const mods = await loadModules();
+  if (!mods) return null;
+  const { SmartSpectraSDK, FrameTransform, breathingMetrics, cardioMetrics, faceMetrics } = mods.sdk;
+  const { decodeMetrics } = mods.messages;
 
   const sdk = new SmartSpectraSDK({
     apiKey,
@@ -134,22 +161,26 @@ export function getOrCreateSession(sessionId: string): PresageSession | null {
   return entry;
 }
 
-export function pushFrame(
+export async function pushFrame(
   sessionId: string,
   buffer: Buffer,
   width: number,
   height: number,
   timestampUs: number,
-  pixelFormat: PixelFormatValue = PixelFormat.kRGB
-): boolean {
-  const session = getOrCreateSession(sessionId);
+  pixelFormat?: PixelFormatValue
+): Promise<boolean> {
+  const session = await getOrCreateSession(sessionId);
   if (!session) return false;
+  const mods = await loadModules();
+  if (!mods) return false;
+  const { PixelFormat } = mods.sdk;
+  const format = pixelFormat ?? PixelFormat.kRGB;
   session.lastFrameAt = Date.now();
-  const stride = width * bytesPerPixel(pixelFormat);
-  return session.sdk.sendFrame(buffer, width, height, stride, pixelFormat, timestampUs);
+  const stride = width * bytesPerPixel(format, PixelFormat);
+  return session.sdk.sendFrame(buffer, width, height, stride, format, timestampUs);
 }
 
-function bytesPerPixel(format: PixelFormatValue): number {
+function bytesPerPixel(format: PixelFormatValue, PixelFormat: SdkModule["PixelFormat"]): number {
   switch (format) {
     case PixelFormat.kRGBA:
     case PixelFormat.kBGRA:
