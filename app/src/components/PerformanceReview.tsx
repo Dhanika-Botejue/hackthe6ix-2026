@@ -127,7 +127,7 @@ export function PerformanceReview({ report, scenarioName, goHome }: { report: Re
                 <div className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>Lowest Composure</div>
                 <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 38, color: composure.dippedBelow50 ? "var(--red)" : "var(--amber)" }}>{composure.low}%</div>
                 <div style={{ fontSize: 11, fontWeight: 800, color: composure.dippedBelow50 ? "var(--red)" : "var(--muted)" }}>
-                  {composure.dippedBelow50 ? "Dropped below 50% → auto 0" : "Did not drop below 50%"}
+                  {composure.dippedBelow50 ? "Dropped below 50% at some point" : "Did not drop below 50%"}
                 </div>
               </div>
             </div>
