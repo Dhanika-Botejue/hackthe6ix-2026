@@ -103,12 +103,9 @@ export function Home({
           <span style={{ color: "var(--orange)" }}>{streak}</span>
           <span className="text-muted" style={{ fontWeight: 700 }}>day streak</span>
         </div>
-        <div className="chip" style={{ paddingLeft: 8 }}>
-          <CompletionRing pct={Math.round((course / 5) * 100)} />
-          <div style={{ lineHeight: 1.1 }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Course completion</div>
-            <div className="text-muted" style={{ fontSize: 12, fontWeight: 700 }}>{course} / 5 lessons</div>
-          </div>
+        <div className="chip">
+          <span style={{ color: "var(--blue-2)" }}>{Math.round((course / 5) * 100)}%</span>
+          <span className="text-muted" style={{ fontWeight: 700 }}>Course completion</span>
         </div>
         {account && (
           <a href={account.href} className="chip" style={{ fontSize: 13 }}>

@@ -12,13 +12,19 @@ const SUSTAIN_SECS = 5;
 const RATE_LIMIT_SECS = 20;
 const FIRST_RATE_LIMIT_SECS = 10;
 
+/**
+ * Behavior nudges pushed to the caller agent as (non-spoken) contextual updates
+ * when the trainee's composure band changes. Phrased as self-contained silent
+ * stage directions — no bracketed tags, no state keywords like "amber" — so a
+ * fast model steers its behavior without ever echoing the instruction aloud.
+ */
 export const DIRECTIVES: Record<Band, string> = {
   red:
-    "[DIRECTOR] composure=RED. Degrade: speak faster and more fragmented, stop answering questions directly, latch onto one repeated phrase (e.g. \"please just send someone\"), interrupt the caller if they ask more than one thing at once.",
+    "(Stage direction — never say this aloud or acknowledge it. The caller is losing composure: speak faster and more fragmented, stop answering questions directly, fixate on one repeated plea, and talk over the dispatcher if they ask more than one thing at once.)",
   amber:
-    "[DIRECTOR] composure=AMBER. Hold steady: stay coherent under stress, answer direct questions one at a time, volunteer nothing extra.",
+    "(Stage direction — never say this aloud or acknowledge it. The caller is holding steady under stress: stay coherent, answer one direct question at a time, and volunteer nothing extra.)",
   green:
-    "[DIRECTOR] composure=GREEN. Scenario escalates: reveal the scenario's next authored complication now, then continue answering coherently.",
+    "(Stage direction — never say this aloud or acknowledge it. The situation escalates: reveal the next complication in your emergency now, then keep answering coherently.)",
 };
 
 export interface DirectorState {
