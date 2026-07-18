@@ -10,6 +10,7 @@ import type {
 export const NATURE_OPTIONS = [
   "False alarm",
   "Fire",
+  "Robbery",
   "Burglary",
   "Assault",
   "Murder",
@@ -62,6 +63,19 @@ function gradeField(raw: string, truth: FieldTruth): FieldVerdict {
     return hit ? "correct" : "wrong";
   }
   return u.length ? "correct" : "wrong";
+}
+
+/** Re-scores an incident grade using semantic verdicts from the LLM grader,
+ *  keeping the locally-rendered answer/correct display strings. */
+export function applyVerdicts(grade: IncidentGrade, verdicts: Record<string, string>): IncidentGrade {
+  const rows: IncidentRow[] = grade.rows.map((r) => {
+    const v = verdicts[r.key];
+    return v === "correct" || v === "wrong" || v === "na" ? { ...r, verdict: v } : r;
+  });
+  const gradable = rows.filter((r) => r.verdict !== "na");
+  const correct = gradable.filter((r) => r.verdict === "correct").length;
+  const score = gradable.length ? Math.round((correct / gradable.length) * 10) : 10;
+  return { score, rows };
 }
 
 export function gradeIncident(details: IncidentDetails, truth: IncidentTruth): IncidentGrade {

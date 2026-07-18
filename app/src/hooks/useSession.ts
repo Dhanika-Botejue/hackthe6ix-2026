@@ -17,6 +17,7 @@ import {
 } from "@/lib/vitals-sim";
 import { usePresageVitals, type PresageLatest } from "@/hooks/usePresageVitals";
 import { EMPTY_INCIDENT } from "@/lib/types";
+import { applyVerdicts } from "@/lib/incident";
 import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
 
 export type Screen = "splash" | "home" | "ready" | "console" | "report" | "history";
@@ -231,26 +232,55 @@ export function useSession() {
     setCourse(built.courseTo);
     setScreen("report");
 
-    // Upgrade the Responses pillar with the LLM grader if configured.
+    // Upgrade the Responses + Incident pillars with the Gemini grader,
+    // sending the full call context (scenario, transcript, form vs answer
+    // key, vitals summary). 204 = no key configured → keep local grades.
+    const series = built.series;
+    const vitalsSummary = {
+      avgComposure: built.composure.avg,
+      lowestComposure: built.composure.low,
+      avgHr: series.length ? Math.round(series.reduce((a, p) => a + p.hr, 0) / series.length) : undefined,
+      avgBr: series.length ? Math.round(series.reduce((a, p) => a + p.br, 0) / series.length) : undefined,
+      durationSecs: built.durSecs,
+    };
     fetch("/api/grade", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenario: scenario.name, transcript }),
+      body: JSON.stringify({
+        scenario: { name: scenario.name, desc: scenario.desc, diff: scenario.diff },
+        transcript,
+        incident: {
+          fields: built.incident.rows.map((r) => ({
+            key: r.key,
+            label: r.label,
+            answer: r.your === "—" ? "" : r.your,
+            correct: r.correct,
+            na: scenario.truth[r.key]?.na ?? false,
+          })),
+        },
+        vitals: vitalsSummary,
+      }),
     })
       .then((r) => (r.status === 204 ? null : r.json()))
-      .then((g: ResponsesGrade | null) => {
-        setReport((prev) => {
-          if (!prev) return prev;
-          const responses: ResponsesGrade = g
-            ? { score: g.score, good: g.good, improve: g.improve, loading: false }
-            : { ...prev.responses, loading: false };
-          const total = prev.composure.score + responses.score + prev.incident.score;
-          const passed = total >= 24;
-          const courseTo = Math.min(100, prev.courseFrom + (passed ? 10 : 3));
-          setCourse(courseTo);
-          return { ...prev, responses, total, passed, courseTo };
-        });
-      })
+      .then(
+        (g: {
+          responses: ResponsesGrade;
+          incident: { verdicts: Record<string, string> };
+        } | null) => {
+          setReport((prev) => {
+            if (!prev) return prev;
+            const responses: ResponsesGrade = g
+              ? { score: g.responses.score, good: g.responses.good, improve: g.responses.improve, loading: false }
+              : { ...prev.responses, loading: false };
+            const incident = g ? applyVerdicts(prev.incident, g.incident.verdicts) : prev.incident;
+            const total = prev.composure.score + responses.score + incident.score;
+            const passed = total >= 24;
+            const courseTo = Math.min(100, prev.courseFrom + (passed ? 10 : 3));
+            setCourse(courseTo);
+            return { ...prev, responses, incident, total, passed, courseTo };
+          });
+        }
+      )
       .catch(() => {
         setReport((prev) => (prev ? { ...prev, responses: { ...prev.responses, loading: false } } : prev));
       });

@@ -13,7 +13,7 @@ interface Lesson {
 }
 
 const LESSONS: Lesson[] = [
-  { cat: "assault", name: "Street assault", idx: 0, state: "active" },
+  { cat: "burglary", name: "Robbery", idx: 0, state: "active" },
   { cat: "fire", name: "House fire", idx: 1, state: "open" },
   { cat: "medical", name: "Cardiac arrest", idx: 2, state: "open" },
   { cat: "car", name: "Highway collision", idx: null, state: "locked" },
