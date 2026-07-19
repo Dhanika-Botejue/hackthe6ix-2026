@@ -1,6 +1,6 @@
-# Codeblue
+# Dispatchlingo
 
-Real-time, high-stakes 911 dispatcher conversation trainer. See [docs/PRD.md](docs/PRD.md) for the full product spec and [design/Codeblue.dc.html](design/Codeblue.dc.html) for the source-of-truth UI design.
+Real-time, high-stakes 911 dispatcher conversation trainer. 
 
 ## Run it
 
