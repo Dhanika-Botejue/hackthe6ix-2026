@@ -367,7 +367,7 @@ export function Home({
           )}
           {onRealCall && (
             <div className="text-muted" style={{ fontSize: 12, maxWidth: 300 }}>
-              On duty? Put the phone next to the laptop — the call is transcribed live and the incident form fills itself.
+              On duty? Put the phone next to the laptop, and the call will be transcribed live, and the incident form fills itself.
             </div>
           )}
         </div>
