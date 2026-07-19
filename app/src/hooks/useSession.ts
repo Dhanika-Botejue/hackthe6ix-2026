@@ -93,6 +93,26 @@ export function useSession() {
   const extractBusyRef = useRef(false);
   const lastExtractCountRef = useRef(0);
 
+  // Looping background ambience (e.g. crackling fire) behind a training call —
+  // scenario-driven, see ScenarioConfig.ambientAudio.
+  const ambientRef = useRef<HTMLAudioElement | null>(null);
+  const stopAmbient = useCallback(() => {
+    ambientRef.current?.pause();
+    ambientRef.current = null;
+  }, []);
+  const startAmbient = useCallback((src: string | undefined) => {
+    stopAmbient();
+    if (!src) return;
+    const audio = new Audio(src);
+    audio.loop = true;
+    audio.volume = 0.35;
+    audio.play().catch(() => {
+      // Autoplay can be blocked before any user gesture — the click that
+      // triggered startCall counts as one, so this is just a safety net.
+    });
+    ambientRef.current = audio;
+  }, [stopAmbient]);
+
   const scenario = SCENARIOS[scenarioIdx];
 
   // Real Call mode mic transcription. One mic hears both sides of the phone
@@ -181,7 +201,8 @@ export function useSession() {
     clearTimers();
     stopCam();
     stopTranscription();
-  }, [clearTimers, stopCam, stopTranscription]);
+    stopAmbient();
+  }, [clearTimers, stopCam, stopTranscription, stopAmbient]);
 
   const go = useCallback(
     (next: Screen) => {
@@ -278,6 +299,7 @@ export function useSession() {
 
   const endCall = useCallback(() => {
     clearTimers();
+    stopAmbient();
     if (conversationIdRef.current) {
       conversation.endSession();
       conversationIdRef.current = null;
@@ -372,7 +394,7 @@ export function useSession() {
       .catch(() => {
         setReport((prev) => (prev ? { ...prev, responses: { ...prev.responses, loading: false } } : prev));
       });
-  }, [clearTimers, conversation, transcript, checks, markers, scenario, scenarioIdx, details, course]);
+  }, [clearTimers, stopAmbient, conversation, transcript, checks, markers, scenario, scenarioIdx, details, course]);
 
   /**
    * One vitals tick, real-Presage or sim depending on what's configured.
@@ -571,6 +593,7 @@ export function useSession() {
     setLiveNotice(null);
     setDetails(EMPTY_INCIDENT);
     clearTimers();
+    stopAmbient(); // no scenario ambience in Real Call mode
     callModeRef.current = "real";
     setCallMode("real");
     go("console");
@@ -581,7 +604,7 @@ export function useSession() {
     }
     timersRef.current.push(setInterval(() => runRealTick(), 1000));
     timersRef.current.push(setInterval(() => runExtractTick(), EXTRACT_EVERY_MS));
-  }, [baselineHr, baselineBr, clearTimers, go, startTranscription, runRealTick, runExtractTick]);
+  }, [baselineHr, baselineBr, clearTimers, stopAmbient, go, startTranscription, runRealTick, runExtractTick]);
 
   /** Hang up a real call: stop mic + timers, run one last extraction, keep the console up. */
   const stopRealCall = useCallback(() => {
@@ -617,6 +640,7 @@ export function useSession() {
     setDetails(EMPTY_INCIDENT);
     clearTimers();
     go("console");
+    startAmbient(scenario.ambientAudio);
 
     let mode: CallMode = "sim";
     try {
@@ -660,7 +684,7 @@ export function useSession() {
     }
     callModeRef.current = mode;
     setCallMode(mode);
-  }, [baselineHr, baselineBr, clearTimers, conversation, go, runLiveTick, runSimTick, scenario]);
+  }, [baselineHr, baselineBr, clearTimers, conversation, go, runLiveTick, runSimTick, scenario, startAmbient]);
 
   /**
    * Entry point from the lesson picker: runs the pre-call baseline capture (webcam +

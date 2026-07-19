@@ -110,6 +110,7 @@ export const SCENARIOS: ScenarioConfig[] = [
       special: { correct: "—", na: true },
     },
     timeline: ROBBERY_TIMELINE,
+    ambientAudio: "/bustling_hotel.mp3",
     firstMessage: "Oh my god, someone just got robbed, he hit him, he took his bag and ran, please send someone",
     systemPrompt: persona(
       "You are a bystander who just witnessed a street robbery at the corner of Fifth and Main, by a corner store. You do not know the victim personally.",
@@ -137,6 +138,7 @@ export const SCENARIOS: ScenarioConfig[] = [
       special: { correct: "—", na: true },
     },
     timeline: HOUSE_FIRE_TIMELINE,
+    ambientAudio: "/burning_building.mp3",
     firstMessage: "There's smoke, there's smoke everywhere, I can't— I can't see the stairs",
     systemPrompt: persona(
       "You are trapped upstairs in your house during a fire, separated from your two young children who are downstairs.",

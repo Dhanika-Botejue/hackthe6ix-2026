@@ -67,6 +67,8 @@ export interface ScenarioConfig {
   systemPrompt: string;
   /** Answer key for grading the Incident Details form after the call. */
   truth: IncidentTruth;
+  /** Background ambience (e.g. "/burning_building.mp3") looped for the call's duration, if set. */
+  ambientAudio?: string;
 }
 
 /* ── Incident Details form (filled by the trainee during the call) ── */

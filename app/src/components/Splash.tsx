@@ -39,14 +39,14 @@ export function Splash({ onDone }: { onDone: () => void }) {
           className="wordmark anim-fadeup"
           style={{ fontSize: 58, marginTop: 20, animationDelay: ".25s" }}
         >
-          <span className="lo">dispatch</span>
-          <span className="hi">lingo</span>
+          <span className="lo">nine one</span>
+          <span className="hi">run</span>
         </div>
         <div
           className="anim-fadeup text-muted"
           style={{ marginTop: 10, fontSize: 15, letterSpacing: ".18em", textTransform: "uppercase", animationDelay: ".5s" }}
         >
-          Duolingo for dispatchers
+          Emergency dispatch training
         </div>
       </div>
     </div>
