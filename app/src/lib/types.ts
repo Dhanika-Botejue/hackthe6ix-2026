@@ -1,6 +1,7 @@
 export type Band = "red" | "amber" | "green";
 
-export type Who = "CALLER" | "YOU";
+/** "AUDIO" = Real Call mode: one mic hears both sides, no speaker separation. */
+export type Who = "CALLER" | "YOU" | "AUDIO";
 
 export interface TranscriptLine {
   who: Who;

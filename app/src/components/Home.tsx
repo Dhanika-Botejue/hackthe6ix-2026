@@ -184,12 +184,15 @@ export function Home({
   streak,
   pickScenario,
   onLaunch,
+  onRealCall,
   account,
 }: {
   course: number;
   streak: number;
   pickScenario: (i: number) => void;
   onLaunch: () => void;
+  /** Real Call mode: on-the-job live transcription + auto-filled incident form. */
+  onRealCall?: () => void;
   account?: { label: string; href?: string; cta?: string } | null;
 }) {
   const [nav, setNav] = useState("home");
@@ -343,6 +346,30 @@ export function Home({
             </span>
             Start
           </button>
+          {onRealCall && (
+            <button
+              className="btn"
+              onClick={onRealCall}
+              style={{
+                marginTop: 10,
+                fontSize: 15,
+                padding: "12px 30px",
+                gap: 10,
+                borderRadius: 16,
+                background: "transparent",
+                color: "var(--red)",
+                border: "1.5px solid var(--red)",
+              }}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--red)", animation: "dlPulse 1.4s infinite" }} />
+              Real Call Mode
+            </button>
+          )}
+          {onRealCall && (
+            <div className="text-muted" style={{ fontSize: 12, maxWidth: 300 }}>
+              On duty? Put the phone next to the laptop — the call is transcribed live and the incident form fills itself.
+            </div>
+          )}
         </div>
 
         {/* lesson path */}

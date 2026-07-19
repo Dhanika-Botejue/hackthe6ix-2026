@@ -188,12 +188,29 @@ function CornerBrackets() {
 }
 
 /* ── Incident Details form ── */
-function Labelled({ icon, color, label, children }: { icon: IconName; color: string; label: string; children: React.ReactNode }) {
+function Labelled({ icon, color, label, auto, children }: { icon: IconName; color: string; label: string; auto?: boolean; children: React.ReactNode }) {
   return (
     <div>
       <div className="field-label">
         <Icon name={icon} size={15} color={color} />
         {label}
+        {auto && (
+          <span
+            title="Auto-filled from the live transcript — edit to take over"
+            style={{
+              marginLeft: "auto",
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: ".08em",
+              color: "var(--blue-2)",
+              border: "1px solid var(--blue)",
+              borderRadius: 6,
+              padding: "1px 5px",
+            }}
+          >
+            AUTO
+          </span>
+        )}
       </div>
       {children}
     </div>
@@ -203,9 +220,11 @@ function Labelled({ icon, color, label, children }: { icon: IconName; color: str
 function IncidentForm({
   details,
   setField,
+  autoFilled,
 }: {
   details: IncidentDetails;
   setField: (k: keyof IncidentDetails, v: string) => void;
+  autoFilled?: Set<keyof IncidentDetails>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -215,18 +234,23 @@ function IncidentForm({
     { v: "unsure", label: "Unsure", cls: "unsure" },
   ];
 
+  const isAuto = (k: keyof IncidentDetails) => autoFilled?.has(k) ?? false;
+  // Auto-fill can land in the two collapsed fields — reveal them rather than
+  // filling a section the dispatcher can't see.
+  const showMore = expanded || !!details.hazards || !!details.special;
+
   return (
     <div className="compact-form" style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-      <Labelled icon="pin" color="var(--blue-2)" label="Location">
+      <Labelled icon="pin" color="var(--blue-2)" label="Location" auto={isAuto("location")}>
         <input className="input" placeholder="Enter location…" value={details.location} onChange={(e) => setField("location", e.target.value)} />
       </Labelled>
-      <Labelled icon="warning" color="var(--amber)" label="Nature of emergency">
+      <Labelled icon="warning" color="var(--amber)" label="Nature of emergency" auto={isAuto("nature")}>
         <select className="select" value={details.nature} onChange={(e) => setField("nature", e.target.value)}>
           <option value="">Select category…</option>
           {NATURE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </Labelled>
-      <Labelled icon="shield" color="var(--green)" label="Is the caller safe right now?">
+      <Labelled icon="shield" color="var(--green)" label="Is the caller safe right now?" auto={isAuto("safe")}>
         <div className="seg">
           {safeOpts.map((o) => (
             <button key={o.v} className={`seg-btn ${details.safe === o.v ? "on " + o.cls : ""}`} onClick={() => setField("safe", details.safe === o.v ? "" : o.v)}>
@@ -235,31 +259,31 @@ function IncidentForm({
           ))}
         </div>
       </Labelled>
-      <Labelled icon="people" color="var(--blue-2)" label="Number of people involved / injured">
+      <Labelled icon="people" color="var(--blue-2)" label="Number of people involved / injured" auto={isAuto("count")}>
         <input className="input" inputMode="numeric" placeholder="Enter number…" value={details.count} onChange={(e) => setField("count", e.target.value)} />
       </Labelled>
-      <Labelled icon="people" color="var(--purple)" label="Caller relationship to victim/patient">
+      <Labelled icon="people" color="var(--purple)" label="Caller relationship to victim/patient" auto={isAuto("relationship")}>
         <select className="select" value={details.relationship} onChange={(e) => setField("relationship", e.target.value)}>
           <option value="">Select relationship…</option>
           {RELATIONSHIP_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </Labelled>
-      <Labelled icon="burglary" color="var(--muted)" label="Suspect description (if applicable)">
+      <Labelled icon="burglary" color="var(--muted)" label="Suspect description (if applicable)" auto={isAuto("suspect")}>
         <input className="input" placeholder="Clothing, direction, vehicle…" value={details.suspect} onChange={(e) => setField("suspect", e.target.value)} />
       </Labelled>
 
-      {expanded && (
+      {showMore && (
         <>
-          <Labelled icon="warning" color="var(--red)" label="Scene safety hazards">
+          <Labelled icon="warning" color="var(--red)" label="Scene safety hazards" auto={isAuto("hazards")}>
             <input className="input" placeholder="Fire, gas, power lines, dog…" value={details.hazards} onChange={(e) => setField("hazards", e.target.value)} />
           </Labelled>
-          <Labelled icon="medical" color="var(--purple)" label="Special considerations">
+          <Labelled icon="medical" color="var(--purple)" label="Special considerations" auto={isAuto("special")}>
             <input className="input" placeholder="Pregnant, elderly, child, disability…" value={details.special} onChange={(e) => setField("special", e.target.value)} />
           </Labelled>
         </>
       )}
 
-      {!expanded && (
+      {!showMore && (
         <button
           className="btn"
           onClick={() => setExpanded(true)}
@@ -310,6 +334,12 @@ export function LiveConsole(props: {
   details: IncidentDetails;
   setField: (k: keyof IncidentDetails, v: string) => void;
   onEndCall: () => void;
+  /** "real" = on-the-job Real Call mode: live mic transcription + auto-filled form. */
+  mode?: "training" | "real";
+  autoFilled?: Set<keyof IncidentDetails>;
+  micListening?: boolean;
+  micInterim?: string;
+  onExit?: () => void;
 }) {
   const {
     stream, camDenied, hr, br, comp, band, presageEnabled, emotion: realEmotion,
@@ -317,7 +347,9 @@ export function LiveConsole(props: {
     validationCode, validationHint,
     baselineHr, callT, scenarioIdx = 0, difficulty, course, streak,
     callOver, transcript, liveNotice, details, setField, onEndCall,
+    mode = "training", autoFilled, micListening, micInterim, onExit,
   } = props;
+  const real = mode === "real";
 
   const clock = useClock();
   const bc = BAND_COLOR[band];
@@ -340,7 +372,7 @@ export function LiveConsole(props: {
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [transcript]);
+  }, [transcript, micInterim]);
 
   // Composure coaching nudge: fires once per dip below NUDGE_TRIGGER (not every
   // tick while it stays low) and re-arms only once composure recovers comfortably
@@ -372,30 +404,42 @@ export function LiveConsole(props: {
           <div className="wordmark" style={{ fontSize: 21 }}><span className="lo">dispatch</span><span className="hi">lingo</span></div>
         </div>
         <span className="bar-sep" />
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <Icon name="flame" size={22} color="var(--orange)" />
-          <div style={{ lineHeight: 1.1 }}>
-            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 16, color: "var(--orange)" }}>{streak}</div>
-            <div className="text-muted" style={{ fontSize: 10, fontWeight: 800 }}>Day Streak</div>
-          </div>
-        </div>
-        <span className="bar-sep" />
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <CompletionRing pct={Math.round((course / 5) * 100)} size={36} />
-          <span className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>Course<br />Completion</span>
-        </div>
-        <span className="bar-sep" />
-        <div>
-          <div className="text-muted" style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".1em" }}>DIFFICULTY</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-            <div style={{ display: "flex", gap: 3 }}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <span key={i} style={{ width: 16, height: 6, borderRadius: 3, background: i < difficulty ? "var(--blue-2)" : "var(--surface-3)" }} />
-              ))}
+        {real ? (
+          <span
+            className="chip"
+            style={{ padding: "6px 14px", fontSize: 12, fontWeight: 800, letterSpacing: ".1em", color: "var(--red)", border: "1px solid var(--red)" }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--red)", animation: "dlPulse 1.4s infinite" }} />
+            REAL CALL
+          </span>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <Icon name="flame" size={22} color="var(--orange)" />
+              <div style={{ lineHeight: 1.1 }}>
+                <div style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 16, color: "var(--orange)" }}>{streak}</div>
+                <div className="text-muted" style={{ fontSize: 10, fontWeight: 800 }}>Day Streak</div>
+              </div>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 800, color: "var(--blue-2)" }}>{DIFF_NAME[Math.max(0, Math.min(4, difficulty - 1))]}</span>
-          </div>
-        </div>
+            <span className="bar-sep" />
+            <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <CompletionRing pct={Math.round((course / 5) * 100)} size={36} />
+              <span className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>Course<br />Completion</span>
+            </div>
+            <span className="bar-sep" />
+            <div>
+              <div className="text-muted" style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".1em" }}>DIFFICULTY</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                <div style={{ display: "flex", gap: 3 }}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <span key={i} style={{ width: 16, height: 6, borderRadius: 3, background: i < difficulty ? "var(--blue-2)" : "var(--surface-3)" }} />
+                  ))}
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "var(--blue-2)" }}>{DIFF_NAME[Math.max(0, Math.min(4, difficulty - 1))]}</span>
+              </div>
+            </div>
+          </>
+        )}
         <div style={{ flex: 1 }} />
         <div className="chip" style={{ padding: "6px 13px", fontSize: 13 }}>
           <Icon name="clock" size={16} color="var(--muted)" />
@@ -545,11 +589,20 @@ export function LiveConsole(props: {
 
           <div className="card" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid var(--border)" }}>
-              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "var(--muted)", whiteSpace: "nowrap" }}>LIVE CALL TRANSCRIPT</span>
-              <div style={{ flex: 1 }} />
-              <span className="chip" style={{ padding: "4px 10px", fontSize: 11, color: "var(--red)" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--red)", animation: "dlPulse 1.4s infinite" }} /> Caller
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "var(--muted)", whiteSpace: "nowrap" }}>
+                {real ? "LIVE TRANSCRIPTION" : "LIVE CALL TRANSCRIPT"}
               </span>
+              <div style={{ flex: 1 }} />
+              {real ? (
+                <span className="chip" style={{ padding: "4px 10px", fontSize: 11, color: micListening ? "var(--green)" : "var(--faint)" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: micListening ? "var(--green)" : "var(--faint)", animation: micListening ? "dlPulse 1.4s infinite" : undefined }} />
+                  {micListening ? "Mic live" : "Mic off"}
+                </span>
+              ) : (
+                <span className="chip" style={{ padding: "4px 10px", fontSize: 11, color: "var(--red)" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--red)", animation: "dlPulse 1.4s infinite" }} /> Caller
+                </span>
+              )}
             </div>
 
             {liveNotice && (
@@ -557,11 +610,39 @@ export function LiveConsole(props: {
             )}
 
             <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
-              {transcript.length === 0 && (
-                <div className="text-muted" style={{ margin: "auto", textAlign: "center", fontSize: 13 }}>Connecting the line… the caller will speak first.</div>
+              {transcript.length === 0 && !micInterim && (
+                <div className="text-muted" style={{ margin: "auto", textAlign: "center", fontSize: 13 }}>
+                  {real
+                    ? "Listening… put the phone on speaker next to the laptop and everything said gets transcribed here."
+                    : "Connecting the line… the caller will speak first."}
+                </div>
               )}
               {transcript.map((line, i) => {
                 const you = line.who === "YOU";
+                const audio = line.who === "AUDIO";
+                if (audio) {
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, alignSelf: "flex-start", maxWidth: "86%" }}>
+                      <span className="text-faint" style={{ fontSize: 11, fontWeight: 700, marginTop: 12, fontVariantNumeric: "tabular-nums" }}>{mmss(line.t)}</span>
+                      <div
+                        style={{
+                          padding: "9px 14px 10px",
+                          borderRadius: 16,
+                          borderBottomLeftRadius: 4,
+                          fontSize: 14,
+                          lineHeight: 1.45,
+                          fontWeight: 600,
+                          color: "var(--text)",
+                          background: "var(--surface-3)",
+                          border: "1px solid var(--border)",
+                        }}
+                      >
+                        <div style={{ marginBottom: 3, fontSize: 11, fontWeight: 800, color: "var(--blue-2)" }}>Live audio</div>
+                        {line.text}
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div
                     key={i}
@@ -599,11 +680,26 @@ export function LiveConsole(props: {
                   </div>
                 );
               })}
+              {real && micInterim && (
+                <div style={{ alignSelf: "flex-start", maxWidth: "86%", marginLeft: 38, padding: "9px 14px 10px", borderRadius: 16, borderBottomLeftRadius: 4, fontSize: 14, lineHeight: 1.45, fontWeight: 600, fontStyle: "italic", color: "var(--muted)", background: "var(--surface-2)", border: "1px dashed var(--border-strong)" }}>
+                  {micInterim}…
+                </div>
+              )}
             </div>
 
             <div style={{ margin: "0 14px 12px", padding: "9px 14px", borderRadius: 12, background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>
               {callOver ? (
-                <button className="btn btn-primary" onClick={onEndCall} style={{ padding: "10px 22px" }}>View performance report</button>
+                real ? (
+                  <button className="btn btn-primary" onClick={onExit} style={{ padding: "10px 22px" }}>Call ended — back to Home</button>
+                ) : (
+                  <button className="btn btn-primary" onClick={onEndCall} style={{ padding: "10px 22px" }}>View performance report</button>
+                )
+              ) : real ? (
+                <>
+                  <Eq n={5} height={13} color={micListening ? "var(--green)" : "var(--faint)"} />
+                  {micListening ? "Transcribing live — form fills automatically, edit any field to take over" : "Mic not active"}
+                  <Eq n={5} height={13} color={micListening ? "var(--green)" : "var(--faint)"} />
+                </>
               ) : (
                 <>
                   <Eq n={5} height={13} />
@@ -618,9 +714,15 @@ export function LiveConsole(props: {
         {/* right */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
           <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "11px 14px", flex: "none", minHeight: 60 }}>
-            <button className="btn btn-danger" onClick={onEndCall} style={{ padding: "11px 20px", gap: 8 }}>
-              <Icon name="phone" size={16} color="#fff" style={{ transform: "rotate(135deg)" }} /> End Call
-            </button>
+            {real && callOver ? (
+              <button className="btn btn-primary" onClick={onExit} style={{ padding: "11px 20px", gap: 8 }}>
+                Back to Home
+              </button>
+            ) : (
+              <button className="btn btn-danger" onClick={onEndCall} style={{ padding: "11px 20px", gap: 8 }}>
+                <Icon name="phone" size={16} color="#fff" style={{ transform: "rotate(135deg)" }} /> End Call
+              </button>
+            )}
           </div>
 
           <div className="card card-pad-sm" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -629,7 +731,7 @@ export function LiveConsole(props: {
               <span style={{ fontWeight: 800, color: "var(--blue-2)", fontSize: 13 }}>{filled} / 8</span>
             </div>
             <div style={{ overflowY: "auto", minHeight: 0, paddingRight: 6, marginRight: -6 }}>
-              <IncidentForm details={details} setField={setField} />
+              <IncidentForm details={details} setField={setField} autoFilled={real ? autoFilled : undefined} />
             </div>
           </div>
         </div>
@@ -662,25 +764,31 @@ export function LiveConsole(props: {
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, fontFamily: "var(--font-heading)" }}>
-            Call {scenarioIdx + 1} of {TOTAL_CALLS}
+        {real ? (
+          <span style={{ fontSize: 12, fontWeight: 800, fontFamily: "var(--font-heading)", color: "var(--red)", letterSpacing: ".08em" }}>
+            REAL CALL MODE — live transcription &amp; auto-fill
           </span>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            {Array.from({ length: TOTAL_CALLS }).map((_, i) => (
-              <span
-                key={i}
-                style={{
-                  width: i === scenarioIdx ? 20 : 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: i === scenarioIdx ? "var(--blue-2)" : i < scenarioIdx ? "rgba(28,176,246,0.45)" : "var(--surface-3)",
-                  transition: "width .3s",
-                }}
-              />
-            ))}
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, fontFamily: "var(--font-heading)" }}>
+              Call {scenarioIdx + 1} of {TOTAL_CALLS}
+            </span>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {Array.from({ length: TOTAL_CALLS }).map((_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: i === scenarioIdx ? 20 : 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: i === scenarioIdx ? "var(--blue-2)" : i < scenarioIdx ? "rgba(28,176,246,0.45)" : "var(--surface-3)",
+                    transition: "width .3s",
+                  }}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <div style={{ flex: 1 }} />
         <span className="chip" style={{ padding: "7px 14px", fontSize: 12, color: "var(--muted)" }}>
           <Icon name="help" size={16} color="var(--muted)" /> Need Help?

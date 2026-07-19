@@ -36,6 +36,7 @@ export function HomeClient({ user }: { user: User | null }) {
           streak={STREAK}
           pickScenario={s.pickScenario}
           onLaunch={s.beginCalibration}
+          onRealCall={s.startRealCall}
           account={account}
         />
       )}
@@ -86,7 +87,12 @@ export function HomeClient({ user }: { user: User | null }) {
           liveNotice={s.liveNotice}
           details={s.details}
           setField={s.setField}
-          onEndCall={s.endCall}
+          onEndCall={s.callMode === "real" ? s.stopRealCall : s.endCall}
+          mode={s.callMode === "real" ? "real" : "training"}
+          autoFilled={s.autoFilled}
+          micListening={s.micListening}
+          micInterim={s.micInterim}
+          onExit={() => s.go("home")}
         />
       )}
 

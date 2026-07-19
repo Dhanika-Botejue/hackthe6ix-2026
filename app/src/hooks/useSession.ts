@@ -16,13 +16,18 @@ import {
   type VitalsSimState,
 } from "@/lib/vitals-sim";
 import { usePresageVitals, type PresageLatest } from "@/hooks/usePresageVitals";
+import { useLiveTranscription } from "@/hooks/useLiveTranscription";
 import { EMPTY_INCIDENT } from "@/lib/types";
 import { applyVerdicts } from "@/lib/incident";
-import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick } from "@/lib/types";
+import type { Band, Brief, Checks, IncidentDetails, Marker, Report, ResponsesGrade, SessionRow, TranscriptLine, VitalsTick, Who } from "@/lib/types";
 
 export type Screen = "splash" | "home" | "ready" | "calibrating" | "incoming" | "console" | "report" | "history";
 type BaselineState = "idle" | "running" | "done";
-type CallMode = "sim" | "live" | null;
+/** "real" = Real Call mode: an actual call on the dispatcher's phone, transcribed off the laptop mic. */
+type CallMode = "sim" | "live" | "real" | null;
+
+/** How often Real Call mode re-runs the Gemini form extraction over the transcript. */
+const EXTRACT_EVERY_MS = 6000;
 
 const BASELINE_SECS = Number(process.env.NEXT_PUBLIC_BASELINE_SECONDS ?? 15);
 const DEMO_SPEED = Number(process.env.NEXT_PUBLIC_DEMO_SPEED ?? 1);
@@ -77,7 +82,31 @@ export function useSession() {
   const lastFaceTensionRef = useRef<number | undefined>(undefined);
   const completedLessonsRef = useRef<Set<number>>(new Set()); // unique lesson idxs finished
 
+  /* Real Call mode: which form fields the dispatcher edited by hand (auto-fill
+     must never overwrite those) and which the extractor filled (for the AUTO
+     badge in the form). Mirrored in refs so interval closures see fresh sets. */
+  const manualFieldsRef = useRef<Set<keyof IncidentDetails>>(new Set());
+  const autoFilledRef = useRef<Set<keyof IncidentDetails>>(new Set());
+  const [autoFilled, setAutoFilled] = useState<Set<keyof IncidentDetails>>(new Set());
+  const callModeRef = useRef<CallMode>(null);
+  const transcriptStateRef = useRef<TranscriptLine[]>([]);
+  const extractBusyRef = useRef(false);
+  const lastExtractCountRef = useRef(0);
+
   const scenario = SCENARIOS[scenarioIdx];
+
+  // Real Call mode mic transcription. One mic hears both sides of the phone
+  // call, so lines land as speaker-less "AUDIO" turns.
+  const {
+    start: startTranscription,
+    stop: stopTranscription,
+    listening: micListening,
+    interim: micInterim,
+    error: micError,
+  } = useLiveTranscription((text) => pushTurn("AUDIO", text));
+  useEffect(() => {
+    if (micError) setLiveNotice(micError);
+  }, [micError]);
 
   const presage = usePresageVitals();
   const presageLatestRef = useRef<PresageLatest>(presage.latest);
@@ -113,6 +142,12 @@ export function useSession() {
   useEffect(() => {
     secsRef.current = callT;
   }, [callT]);
+  useEffect(() => {
+    transcriptStateRef.current = transcript;
+  }, [transcript]);
+  useEffect(() => {
+    callModeRef.current = callMode;
+  }, [callMode]);
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach(clearInterval);
@@ -145,7 +180,8 @@ export function useSession() {
   useEffect(() => () => {
     clearTimers();
     stopCam();
-  }, [clearTimers, stopCam]);
+    stopTranscription();
+  }, [clearTimers, stopCam, stopTranscription]);
 
   const go = useCallback(
     (next: Screen) => {
@@ -156,12 +192,21 @@ export function useSession() {
     [clearTimers, startCam]
   );
 
-  const setField = useCallback(
-    (k: keyof IncidentDetails, v: string) => setDetails((prev) => ({ ...prev, [k]: v })),
-    []
-  );
+  const setField = useCallback((k: keyof IncidentDetails, v: string) => {
+    if (callModeRef.current === "real") {
+      // A hand edit takes the field out of auto-fill's reach for the rest of the call.
+      manualFieldsRef.current.add(k);
+      if (autoFilledRef.current.has(k)) {
+        const auto = new Set(autoFilledRef.current);
+        auto.delete(k);
+        autoFilledRef.current = auto;
+        setAutoFilled(auto);
+      }
+    }
+    setDetails((prev) => ({ ...prev, [k]: v }));
+  }, []);
 
-  function pushTurn(who: "CALLER" | "YOU", text: string) {
+  function pushTurn(who: Who, text: string) {
     setTranscript((prev) => [...prev, { who, text, t: secsRef.current }]);
   }
 
@@ -433,6 +478,122 @@ export function useSession() {
     });
   }, [baselineHr, conversation, presage.enabled, computeNextVitals]);
 
+  /** Real Call tick: vitals only — no director, no scripted events, no ElevenLabs. */
+  const runRealTick = useCallback(() => {
+    setCallT((prevT) => {
+      const t = prevT + 1;
+      const vs = computeNextVitals();
+      vitalsRef.current = vs;
+      setHr(vs.hr);
+      setBr(vs.br);
+      setComp(vs.comp);
+      setBand((prevBand) => bandOf(vs.comp, prevBand));
+      seriesRef.current.push({ t, hr: vs.hr, br: vs.br, comp: vs.comp, band: bandOf(vs.comp) });
+      return t;
+    });
+  }, [computeNextVitals]);
+
+  /**
+   * Re-extract the incident form from the full transcript so far. Skips when
+   * nothing new was said or a request is already in flight; the newest result
+   * wins for every field the dispatcher hasn't touched by hand.
+   */
+  const runExtractTick = useCallback(() => {
+    const lines = transcriptStateRef.current;
+    if (extractBusyRef.current || lines.length === 0 || lines.length === lastExtractCountRef.current) return;
+    extractBusyRef.current = true;
+    lastExtractCountRef.current = lines.length;
+    fetch("/api/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: lines }),
+    })
+      .then((r) => (r.ok && r.status !== 204 ? r.json() : null))
+      .then((g: { fields?: Partial<Record<keyof IncidentDetails, string>> } | null) => {
+        const fields = g?.fields;
+        if (!fields || callModeRef.current !== "real") return;
+        setDetails((prev) => {
+          const next = { ...prev };
+          const auto = new Set(autoFilledRef.current);
+          let changed = false;
+          for (const k of Object.keys(fields) as (keyof IncidentDetails)[]) {
+            const v = fields[k];
+            if (!v || !(k in prev) || manualFieldsRef.current.has(k)) continue;
+            if (k === "safe" && !["yes", "no", "unsure"].includes(v)) continue;
+            if (next[k] !== v) {
+              next[k] = v as never;
+              changed = true;
+            }
+            auto.add(k);
+          }
+          if (auto.size !== autoFilledRef.current.size) {
+            autoFilledRef.current = auto;
+            setAutoFilled(auto);
+          }
+          return changed ? next : prev;
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        extractBusyRef.current = false;
+      });
+  }, []);
+
+  /**
+   * Real Call mode: dispatcher takes an actual call on their phone next to the
+   * laptop. Mic transcribes both voices live, Gemini keeps the incident form
+   * filled, Presage vitals/composure run exactly as in training. No scenario,
+   * no grading, no report.
+   */
+  const startRealCall = useCallback(() => {
+    seriesRef.current = [];
+    firedRef.current = new Set();
+    lastTraineeTurnRef.current = null;
+    checksRef.current = {};
+    manualFieldsRef.current = new Set();
+    autoFilledRef.current = new Set();
+    setAutoFilled(new Set());
+    extractBusyRef.current = false;
+    lastExtractCountRef.current = 0;
+    vitalsRef.current = initVitalsSim(baselineHr);
+    setCallT(0);
+    setHr(baselineHr);
+    setBr(baselineBr);
+    setComp(88);
+    setBand("green");
+    setTranscript([]);
+    setCopilot("Live call — form fills itself as facts come in.");
+    setBrief({});
+    setChecks({});
+    setMarkers([]);
+    setCallerState("LIVE");
+    setCallOver(false);
+    setLiveNotice(null);
+    setDetails(EMPTY_INCIDENT);
+    clearTimers();
+    callModeRef.current = "real";
+    setCallMode("real");
+    go("console");
+
+    const ok = startTranscription();
+    if (!ok) {
+      setLiveNotice("Live transcription needs Chrome or Edge — you can still fill the form manually.");
+    }
+    timersRef.current.push(setInterval(() => runRealTick(), 1000));
+    timersRef.current.push(setInterval(() => runExtractTick(), EXTRACT_EVERY_MS));
+  }, [baselineHr, baselineBr, clearTimers, go, startTranscription, runRealTick, runExtractTick]);
+
+  /** Hang up a real call: stop mic + timers, run one last extraction, keep the console up. */
+  const stopRealCall = useCallback(() => {
+    clearTimers();
+    stopTranscription();
+    setCallOver(true);
+    // Final sweep so anything said in the last few seconds still lands in the
+    // form — force it even if the count matches the last scheduled run.
+    lastExtractCountRef.current = -1;
+    runExtractTick();
+  }, [clearTimers, stopTranscription, runExtractTick]);
+
   const startCall = useCallback(async () => {
     seriesRef.current = [];
     firedRef.current = new Set();
@@ -497,6 +658,7 @@ export function useSession() {
       const iv = setInterval(() => runSimTick(), 1000 / DEMO_SPEED);
       timersRef.current.push(iv);
     }
+    callModeRef.current = mode;
     setCallMode(mode);
   }, [baselineHr, baselineBr, clearTimers, conversation, go, runLiveTick, runSimTick, scenario]);
 
@@ -541,6 +703,11 @@ export function useSession() {
     beginCalibration,
     startCall,
     endCall,
+    startRealCall,
+    stopRealCall,
+    autoFilled,
+    micListening,
+    micInterim,
     callMode,
     callT,
     hr,
