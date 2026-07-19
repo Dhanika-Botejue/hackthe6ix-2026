@@ -6,9 +6,9 @@ export function LoginScreen({ onDemo }: { onDemo: () => void }) {
       <div className="card card-pad anim-pop" style={{ width: 380, maxWidth: "100%", padding: 32, alignItems: "center", textAlign: "center", display: "flex", flexDirection: "column", gap: 6 }}>
         <OwlMascot size={110} />
         <div className="wordmark" style={{ fontSize: 34, marginTop: 6 }}>
-          <span className="lo">dispatch</span><span className="hi">lingo</span>
+          <span className="lo">nine one</span><span className="hi">run</span>
         </div>
-        <div className="text-muted" style={{ fontSize: 13, marginBottom: 18 }}>Duolingo for dispatchers</div>
+        <div className="text-muted" style={{ fontSize: 13, marginBottom: 18 }}>Emergency dispatch training</div>
 
         <a href="/auth/login" className="btn btn-primary" style={{ width: "100%" }}>Sign in</a>
         <a href="/auth/login?screen_hint=signup" style={{ fontSize: 13, marginTop: 2 }}>Create an account</a>

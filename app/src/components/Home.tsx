@@ -319,11 +319,11 @@ export function Home({
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
           <OwlMascot size={210} float />
           <div className="wordmark" style={{ fontSize: 48, marginTop: 4 }}>
-            <span className="lo">dispatch</span>
-            <span className="hi">lingo</span>
+            <span className="lo">nine one </span>
+            <span className="hi"> run</span>
           </div>
           <div className="text-muted" style={{ maxWidth: 330, fontSize: 14 }}>
-            Learn to run an emergency line one call at a time. Stay calm, get the facts, save lives.
+            Emergency dispatch training. Stay calm, get the facts, save lives.
           </div>
           <button
             className="btn btn-primary"
