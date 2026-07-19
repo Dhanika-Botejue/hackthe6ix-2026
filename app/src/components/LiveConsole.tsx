@@ -137,9 +137,9 @@ function VitalCard({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 11,
-        padding: "9px 11px",
-        borderRadius: 12,
+        gap: 10,
+        padding: "6px 10px",
+        borderRadius: 11,
         background: "var(--surface-2)",
         border: "1px solid var(--border)",
       }}
@@ -158,8 +158,8 @@ function VitalCard({
 
 function Panel({ title, live, right, children, style }: { title: string; live?: boolean; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", ...style }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+    <div className="card card-pad-sm" style={{ display: "flex", flexDirection: "column", ...style }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "var(--muted)" }}>{title}</span>
         {right}
         {live && (
@@ -216,7 +216,7 @@ function IncidentForm({
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="compact-form" style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       <Labelled icon="pin" color="var(--blue-2)" label="Location">
         <input className="input" placeholder="Enter location…" value={details.location} onChange={(e) => setField("location", e.target.value)} />
       </Labelled>
@@ -404,9 +404,9 @@ export function LiveConsole(props: {
       </div>
 
       {/* body */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "300px 1fr 340px", gap: 14, padding: 14, overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "300px 1fr 340px", gap: 14, padding: "12px 14px", overflow: "hidden" }}>
         {/* left */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", minHeight: 0 }}>
           {presageEnabled && presageTabHidden && (
             <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--amber)", color: "#1a1200", fontSize: 12, fontWeight: 700 }}>
               ⚠ This tab isn&rsquo;t focused — browsers throttle background tabs, which stalls
@@ -419,7 +419,7 @@ export function LiveConsole(props: {
             </div>
           )}
           <Panel title="YOUR WEBCAM" live={!camDenied}>
-            <div style={{ position: "relative", height: 138, borderRadius: 12, overflow: "hidden", border: "1px solid var(--border-strong)", background: "#000" }}>
+            <div style={{ position: "relative", height: 128, borderRadius: 12, overflow: "hidden", border: "1px solid var(--border-strong)", background: "#000" }}>
               <CameraFeed stream={stream} />
               <CornerBrackets />
               {camDenied && (
@@ -428,7 +428,7 @@ export function LiveConsole(props: {
             </div>
           </Panel>
 
-          <Panel title="VITALS" live={!camDenied} style={{ gap: 9 }}>
+          <Panel title="VITALS" live={!camDenied} style={{ gap: 6 }}>
             <VitalCard
               icon="heart"
               iconColor="var(--red)"
@@ -469,7 +469,11 @@ export function LiveConsole(props: {
                     ? <span style={{ color: "var(--amber)" }}>{signalDegraded ? "Recalibrating…" : "Calibrating…"} (30s window)</span>
                     : br > 18 ? "Elevated" : "Normal"}
                 </span>
-                <Sparkline color="var(--blue-2)" seed={4} width={86} />
+                {breathingTrace && breathingTrace.length >= 2 ? (
+                  <TraceChart points={breathingTrace} color="var(--blue-2)" width={86} height={20} />
+                ) : (
+                  <Sparkline color="var(--blue-2)" seed={4} width={86} />
+                )}
               </div>
             </VitalCard>
 
@@ -494,18 +498,10 @@ export function LiveConsole(props: {
             <div style={{ position: "relative", height: 12, borderRadius: 999, background: "linear-gradient(90deg, var(--red), var(--amber) 45%, var(--green))" }}>
               <span style={{ position: "absolute", top: -3, left: `calc(${comp}% - 9px)`, width: 18, height: 18, borderRadius: "50%", background: "#fff", border: "3px solid var(--bg)", boxShadow: "0 2px 6px rgba(0,0,0,.5)", transition: "left .6s" }} />
             </div>
-            <div className="text-muted" style={{ fontSize: 11, marginTop: 9, display: "flex", alignItems: "center", gap: 5 }}>
+            <div className="text-muted" style={{ fontSize: 11, marginTop: 6, display: "flex", alignItems: "center", gap: 5 }}>
               <Icon name="info" size={13} color="var(--faint)" />
               {compMsg}
             </div>
-          </Panel>
-
-          <Panel title="BREATHING WAVEFORM" live={presageEnabled}>
-            {presageEnabled ? (
-              <TraceChart points={breathingTrace} color="var(--blue-2)" width={268} height={56} />
-            ) : (
-              <div className="text-muted" style={{ fontSize: 12, textAlign: "center", padding: "16px 0" }}>Presage not connected</div>
-            )}
           </Panel>
         </div>
 
@@ -610,12 +606,12 @@ export function LiveConsole(props: {
             </button>
           </div>
 
-          <div className="card card-pad" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div className="card card-pad-sm" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "var(--muted)" }}>INCIDENT DETAILS</span>
               <span style={{ fontWeight: 800, color: "var(--blue-2)", fontSize: 13 }}>{filled} / 8</span>
             </div>
-            <div style={{ overflowY: "auto", paddingRight: 6, marginRight: -6 }}>
+            <div style={{ overflowY: "auto", minHeight: 0, paddingRight: 6, marginRight: -6 }}>
               <IncidentForm details={details} setField={setField} />
             </div>
           </div>
