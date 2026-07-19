@@ -407,23 +407,37 @@ export function LiveConsole(props: {
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "300px 1fr 340px", gap: 14, padding: "12px 14px", overflow: "hidden" }}>
         {/* left */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", minHeight: 0 }}>
-          {presageEnabled && presageTabHidden && (
-            <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--amber)", color: "#1a1200", fontSize: 12, fontWeight: 700 }}>
-              ⚠ This tab isn&rsquo;t focused — browsers throttle background tabs, which stalls
-              vitals capture. Keep this tab visible during the call.
-            </div>
-          )}
-          {presageEnabled && !presageTabHidden && validationCode !== undefined && validationCode !== 0 && validationHint && (
-            <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--amber)", color: "#1a1200", fontSize: 12, fontWeight: 700 }}>
-              ⚠ {validationHint} — pulse reading pauses until this clears (breathing tolerates it better).
-            </div>
-          )}
           <Panel title="YOUR WEBCAM" live={!camDenied}>
             <div style={{ position: "relative", height: 128, borderRadius: 12, overflow: "hidden", border: "1px solid var(--border-strong)", background: "#000" }}>
               <CameraFeed stream={stream} />
               <CornerBrackets />
               {camDenied && (
                 <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "var(--faint)", fontSize: 12 }}>NO CAMERA</div>
+              )}
+              {presageEnabled && (presageTabHidden || (validationCode !== undefined && validationCode !== 0 && validationHint)) && (
+                <div
+                  className="anim-fadeup"
+                  role="alert"
+                  style={{
+                    position: "absolute",
+                    left: 6,
+                    right: 6,
+                    bottom: 6,
+                    padding: "6px 9px",
+                    borderRadius: 8,
+                    background: "rgba(26,18,0,0.82)",
+                    border: "1px solid var(--amber)",
+                    color: "var(--amber)",
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    lineHeight: 1.3,
+                    backdropFilter: "blur(3px)",
+                  }}
+                >
+                  {presageTabHidden
+                    ? "⚠ Tab not focused — vitals capture is stalled. Keep this tab visible."
+                    : `⚠ ${validationHint}`}
+                </div>
               )}
             </div>
           </Panel>
@@ -463,16 +477,19 @@ export function LiveConsole(props: {
                 </span>
               }
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 2 }}>
+              <div style={{ marginTop: 2 }}>
                 <span className="text-muted" style={{ fontSize: 10.5, whiteSpace: "nowrap" }}>
                   {presageEnabled && (breathingStable === false || signalDegraded)
                     ? <span style={{ color: "var(--amber)" }}>{signalDegraded ? "Recalibrating…" : "Calibrating…"} (30s window)</span>
                     : br > 18 ? "Elevated" : "Normal"}
                 </span>
+              </div>
+              {/* full-width waveform strip so the rise/fall of each breath actually reads, not a corner sliver */}
+              <div style={{ marginTop: 3, width: "100%" }}>
                 {breathingTrace && breathingTrace.length >= 2 ? (
-                  <TraceChart points={breathingTrace} color="var(--blue-2)" width={86} height={20} />
+                  <TraceChart points={breathingTrace} color="var(--blue-2)" width={226} height={34} />
                 ) : (
-                  <Sparkline color="var(--blue-2)" seed={4} width={86} />
+                  <Sparkline color="var(--blue-2)" seed={4} width={226} />
                 )}
               </div>
             </VitalCard>

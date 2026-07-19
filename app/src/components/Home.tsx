@@ -204,10 +204,13 @@ export function Home({
   // course), not a fixed one — passing lesson N moves the glow to lesson N+1.
   // Lessons with idx === null have no scenario built yet, so they stay locked
   // no matter how far course has advanced.
+  // Cardiac arrest has no ElevenLabs agent configured yet (see .env.local) —
+  // keep it greyed out/unclickable until one exists, regardless of progress.
+  const NO_AGENT_YET = new Set([2]);
   const LESSONS: Lesson[] = LESSON_DEFS.map((l, i) => ({
     ...l,
-    done: l.idx !== null && i < course,
-    state: l.idx === null ? "locked" : i === course ? "active" : "open",
+    done: l.idx !== null && !NO_AGENT_YET.has(i) && i < course,
+    state: l.idx === null || NO_AGENT_YET.has(i) ? "locked" : i === course ? "active" : "open",
   }));
 
   // smooth dashed trail winding through the nodes
