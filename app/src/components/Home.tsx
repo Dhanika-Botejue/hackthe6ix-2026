@@ -323,7 +323,7 @@ export function Home({
             <span className="hi">lingo</span>
           </div>
           <div className="text-muted" style={{ maxWidth: 330, fontSize: 14 }}>
-            Learn to run an emergency line — one call at a time. Stay calm, get the facts, save lives.
+            Learn to run an emergency line one call at a time. Stay calm, get the facts, save lives.
           </div>
           <button
             className="btn btn-primary"
