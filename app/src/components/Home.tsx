@@ -10,14 +10,19 @@ interface Lesson {
   name: string;
   idx: number | null; // scenario index to launch, or null when locked
   state: NodeState;
+  done: boolean;
 }
 
-const LESSONS: Lesson[] = [
-  { cat: "burglary", name: "Robbery", idx: 0, state: "active" },
-  { cat: "fire", name: "House fire", idx: 1, state: "open" },
-  { cat: "medical", name: "Cardiac arrest", idx: 2, state: "open" },
-  { cat: "car", name: "Highway collision", idx: null, state: "locked" },
-  { cat: "lock", name: "Final certification", idx: null, state: "locked" },
+// idx === null lessons have no scenario built yet, so they stay locked
+// regardless of progress. Which of the real lessons gets the "active" glow
+// is computed from `course` in Home() below — it's the next one to complete,
+// not a fixed lesson.
+const LESSON_DEFS: { cat: IconName; name: string; idx: number | null }[] = [
+  { cat: "burglary", name: "Robbery", idx: 0 },
+  { cat: "fire", name: "House fire", idx: 1 },
+  { cat: "medical", name: "Cardiac arrest", idx: 2 },
+  { cat: "car", name: "Highway collision", idx: null },
+  { cat: "lock", name: "Final certification", idx: null },
 ];
 
 // zigzag: alternate left / right columns like a winding lesson trail
@@ -126,6 +131,24 @@ function LessonNode({ lesson, x, y, onClick }: { lesson: Lesson; x: number; y: n
       }}
     >
       <Icon name={lesson.cat} size={30} />
+      {lesson.done && (
+        <span
+          style={{
+            position: "absolute",
+            bottom: -4,
+            right: -4,
+            width: 22,
+            height: 22,
+            borderRadius: "50%",
+            background: "var(--green)",
+            border: "2px solid var(--bg)",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <Icon name="check" size={12} color="#06210a" />
+        </span>
+      )}
       {active && (
         <>
           <span
@@ -176,6 +199,16 @@ export function Home({
     pickScenario(idx);
     onLaunch();
   };
+
+  // The highlighted "active" node is the next lesson to complete (index ===
+  // course), not a fixed one — passing lesson N moves the glow to lesson N+1.
+  // Lessons with idx === null have no scenario built yet, so they stay locked
+  // no matter how far course has advanced.
+  const LESSONS: Lesson[] = LESSON_DEFS.map((l, i) => ({
+    ...l,
+    done: l.idx !== null && i < course,
+    state: l.idx === null ? "locked" : i === course ? "active" : "open",
+  }));
 
   // smooth dashed trail winding through the nodes
   const trail = LESSONS.map((_, i) => {

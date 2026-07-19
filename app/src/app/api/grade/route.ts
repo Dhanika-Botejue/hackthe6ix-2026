@@ -32,6 +32,21 @@ interface GradeRequest {
     fields: { key: string; label: string; answer: string; correct: string; na?: boolean }[];
   };
   vitals?: { avgComposure?: number; lowestComposure?: number; avgHr?: number; avgBr?: number; durationSecs?: number };
+  /** key -> seconds into the call when the trainee first raised that topic (deterministic, not Gemini's guess). */
+  checks?: Record<string, number | undefined>;
+}
+
+const CHECK_LABELS: Record<string, string> = {
+  location: "Address",
+  nature: "Nature of emergency",
+  victims: "Victim count",
+  breathing: "Breathing status",
+  safety: "Caller safety",
+};
+
+function mmss(t: number): string {
+  const s = Math.max(0, Math.floor(t));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 const RESPONSE_SCHEMA = {
@@ -71,7 +86,15 @@ const RESPONSE_SCHEMA = {
 
 function buildPrompt(body: GradeRequest): string {
   const lines = (body.transcript ?? [])
-    .map((l) => `${l.who === "YOU" ? "DISPATCHER" : "CALLER"}: ${l.text}`)
+    .map((l) => `[${l.t !== undefined ? mmss(l.t) : "?:??"}] ${l.who === "YOU" ? "DISPATCHER" : "CALLER"}: ${l.text}`)
+    .join("\n");
+
+  const checks = body.checks ?? {};
+  const checklistTiming = Object.entries(CHECK_LABELS)
+    .map(([key, label]) => {
+      const t = checks[key];
+      return `- ${label}: ${t !== undefined ? `raised at ${mmss(t)} into the call` : "never raised by the dispatcher"}`;
+    })
     .join("\n");
 
   const fields = (body.incident?.fields ?? [])
@@ -95,7 +118,14 @@ ${body.scenario?.desc ?? ""}
 
 TRAINEE VITALS DURING THE CALL (context only — do not score composure): ${vitals}
 
-FULL CALL TRANSCRIPT:
+PROTOCOL CHECKLIST TIMING (ground truth, computed deterministically — use these
+timestamps for any judgment about whether/how quickly the dispatcher asked
+about each topic; do NOT re-derive timing yourself from re-reading the
+transcript, and do not claim something was asked "late" or suggest asking for
+it "earlier" if its timestamp here is already early in the call):
+${checklistTiming}
+
+FULL CALL TRANSCRIPT (each line timestamped mm:ss from call start):
 ${lines || "(no dispatcher turns recorded — the trainee never spoke)"}
 
 TRAINEE'S INCIDENT DETAILS FORM vs GROUND TRUTH:
@@ -104,7 +134,7 @@ ${fields || "(form not submitted)"}
 Your two tasks:
 
 1. "responses" — grade the DISPATCHER's communication and decision-making 0-10.
-   Criteria: got the location early and confirmed it; stayed calm and reassuring toward a panicking caller; asked one clear question at a time; explicitly checked the caller's safety (and re-checked after threats); gathered victim count and breathing status; gave correct life-saving instructions when needed (CPR, evacuate, shelter); professional language. An empty or near-empty transcript means the trainee froze: score 0-2. Write 2-4 specific "good" bullets and 1-3 specific "improve" bullets, each one sentence, each referring to what actually happened in THIS transcript (quote or paraphrase real moments; never invent events).
+   Criteria: got the location early and confirmed it (check the PROTOCOL CHECKLIST TIMING section above for this — never guess); stayed calm and reassuring toward a panicking caller; asked one clear question at a time; explicitly checked the caller's safety (and re-checked after threats); gathered victim count and breathing status; gave correct life-saving instructions when needed (CPR, evacuate, shelter); professional language. An empty or near-empty transcript means the trainee froze: score 0-2. Write 2-4 specific "good" bullets and 1-3 specific "improve" bullets, each one sentence, each referring to what actually happened in THIS transcript (quote or paraphrase real moments; never invent events, and never suggest improving on something the checklist timing already shows was done promptly).
 
 2. "incident" — for EVERY field key listed above, judge the trainee's written answer against ground truth semantically, not literally. "5th and main" matches "Fifth and Main". "2" matches "two". "black hoodie, tall and thin" matches "Dark hoodie, 6'0, skinny build". Different formatting, abbreviations, or extra detail that is still accurate → "correct". Blank, missing, or factually wrong → "wrong". Fields whose ground truth is "(not applicable in this scenario)" → "na" regardless of what the trainee wrote, unless they invented false information, in which case "wrong".
 

@@ -15,6 +15,20 @@ const BAND_COLOR: Record<Band, string> = { red: "var(--red)", amber: "var(--ambe
 const DIFF_NAME = ["Easy", "Easy", "Medium", "Hard", "Severe"];
 const TOTAL_CALLS = 5; // lesson-path length shown in the bottom pager
 
+// Hardcoded coaching lines for the composure nudge — deliberately short and
+// spoken-coach-like (breathing cues a trainee can actually follow mid-call).
+const CALM_MESSAGES = [
+  "Take a slow, deep breath. In for four seconds, out for six.",
+  "You're okay — breathe in slowly, then let it out even slower.",
+  "Pause for a second. One long inhale, one longer exhale.",
+  "Steady yourself. Drop your shoulders and slow your breathing down.",
+  "Take a moment. Deep breath in... and out. You've got this call.",
+  "Your calm keeps the caller calm — breathe deep and reset.",
+];
+const NUDGE_TRIGGER = 50; // show the popup once composure drops below this
+const NUDGE_REARM = 55; // must recover above this before a new dip can re-trigger it
+const NUDGE_DISMISS_MS = 8000;
+
 /** Animated equalizer bars — the "live audio" dressing from the mock. */
 function Eq({ n = 12, color = "var(--blue-2)", height = 15 }: { n?: number; color?: string; height?: number }) {
   return (
@@ -328,6 +342,27 @@ export function LiveConsole(props: {
     if (el) el.scrollTop = el.scrollHeight;
   }, [transcript]);
 
+  // Composure coaching nudge: fires once per dip below NUDGE_TRIGGER (not every
+  // tick while it stays low) and re-arms only once composure recovers comfortably
+  // above NUDGE_REARM, so a genuinely new dip can trigger it again without it
+  // spamming on every tick while composure is hovering right around the line.
+  const [nudge, setNudge] = useState<string | null>(null);
+  const nudgeArmedRef = useRef(true);
+  const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (comp < NUDGE_TRIGGER && nudgeArmedRef.current) {
+      nudgeArmedRef.current = false;
+      setNudge(CALM_MESSAGES[Math.floor(Math.random() * CALM_MESSAGES.length)]);
+      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+      nudgeTimerRef.current = setTimeout(() => setNudge(null), NUDGE_DISMISS_MS);
+    } else if (comp >= NUDGE_REARM) {
+      nudgeArmedRef.current = true;
+    }
+  }, [comp]);
+  useEffect(() => () => {
+    if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+  }, []);
+
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* top bar — logo + stat segments */}
@@ -638,6 +673,44 @@ export function LiveConsole(props: {
           <Icon name="help" size={16} color="var(--muted)" /> Need Help?
         </span>
       </div>
+
+      {nudge && (
+        <div
+          className="anim-pop"
+          role="alert"
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: 92,
+            transform: "translateX(-50%)",
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            padding: "14px 18px",
+            borderRadius: 18,
+            maxWidth: 460,
+            background: "var(--surface-2)",
+            border: "1px solid var(--amber)",
+            boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
+          }}
+        >
+          <OwlMascot size={52} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".1em", color: "var(--amber)", marginBottom: 3 }}>
+              COMPOSURE DROPPING
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>{nudge}</div>
+          </div>
+          <button
+            onClick={() => setNudge(null)}
+            aria-label="Dismiss"
+            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, flex: "none" }}
+          >
+            <Icon name="x" size={16} color="var(--faint)" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

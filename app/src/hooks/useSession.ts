@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { bandOf, computeComposure, estimateBreathingRateFromTrace } from "@/lib/composure";
-import { buildReport } from "@/lib/report";
+import { buildReport, PASS_THRESHOLD } from "@/lib/report";
 import { directorTick, initDirectorState, callerStateLabelFor, type DirectorState } from "@/lib/director";
 import { copilotFor, detectCheck } from "@/lib/live-heuristics";
 import { SCENARIOS, SEED_SESSIONS } from "@/lib/scenarios";
@@ -238,8 +238,6 @@ export function useSession() {
       conversationIdRef.current = null;
     }
     const courseFrom = course;
-    completedLessonsRef.current.add(scenarioIdx); // finishing a lesson completes it
-    const courseTo = Math.min(TOTAL_LESSONS, completedLessonsRef.current.size);
     const built = buildReport(
       seriesRef.current.map((s) => ({ ...s })),
       transcript,
@@ -248,8 +246,14 @@ export function useSession() {
       details,
       scenario.truth,
       courseFrom,
-      courseTo
+      courseFrom // tentative — only advances below if the call is actually passed
     );
+    // Only counts as completing the lesson (and bumps course completion) on a pass —
+    // finishing a failed call shouldn't silently advance progress.
+    if (built.passed) {
+      completedLessonsRef.current.add(scenarioIdx);
+      built.courseTo = Math.min(TOTAL_LESSONS, completedLessonsRef.current.size);
+    }
     built.responses.loading = true;
     const now = new Date();
     const row: SessionRow = {
@@ -297,6 +301,7 @@ export function useSession() {
           })),
         },
         vitals: vitalsSummary,
+        checks,
       }),
     })
       .then((r) => (r.status === 204 ? null : r.json()))
@@ -312,7 +317,7 @@ export function useSession() {
               : { ...prev.responses, loading: false };
             const incident = g ? applyVerdicts(prev.incident, g.incident.verdicts) : prev.incident;
             const total = prev.composure.score + responses.score + incident.score;
-            const passed = total >= 24;
+            const passed = total >= PASS_THRESHOLD;
             // Lesson completion was already settled in endCall — the regrade
             // only updates scores, never course progress.
             return { ...prev, responses, incident, total, passed };

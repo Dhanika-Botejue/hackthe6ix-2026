@@ -4,7 +4,7 @@ import { useState } from "react";
 import { OwlMascot } from "./OwlMascot";
 import { Icon, IconBadge, type IconName } from "./icons";
 import { CompletionRing } from "./Home";
-import { buildComposureChart } from "@/lib/report";
+import { buildComposureChart, PASS_THRESHOLD } from "@/lib/report";
 import { mmss } from "@/lib/composure";
 import { useClock } from "@/hooks/useClock";
 import type { Report } from "@/lib/types";
@@ -315,7 +315,7 @@ export function PerformanceReview({
                   {passed ? "PASSED" : "KEEP TRAINING"}
                 </div>
                 <p className="text-muted" style={{ marginTop: 12, maxWidth: 300, fontSize: 13 }}>
-                  {passed ? "Great job! You passed this training call." : "You need 24 / 30 to pass. Review the feedback and run it again."}
+                  {passed ? "Great job! You passed this training call." : `You need ${PASS_THRESHOLD} / 30 to pass. Review the feedback and run it again.`}
                 </p>
               </div>
               <div className="card card-pad" style={{ minWidth: 280 }}>

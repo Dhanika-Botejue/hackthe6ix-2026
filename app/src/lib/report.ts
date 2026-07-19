@@ -12,7 +12,7 @@ import type {
   VitalsTick,
 } from "./types";
 
-const PASS_THRESHOLD = 24; // 80% of 30
+export const PASS_THRESHOLD = 21; // 70% of 30
 
 /**
  * Builds the after-action report. Three graded pillars (each /10):
