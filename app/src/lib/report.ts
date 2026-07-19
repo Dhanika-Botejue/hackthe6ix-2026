@@ -16,8 +16,7 @@ const PASS_THRESHOLD = 24; // 80% of 30
 
 /**
  * Builds the after-action report. Three graded pillars (each /10):
- *   1. Composure — average composure across the call; an automatic 0 if it
- *      ever dropped below 50 (PRD scoring rule).
+ *   1. Composure — average composure across the call, out of 10.
  *   2. Responses — communication / decision-making (heuristic here; upgraded
  *      by the Gemini grader in /api/grade when a key is configured).
  *   3. Incident details — accuracy of the form the trainee filled in.
@@ -83,7 +82,7 @@ export function gradeComposure(series: VitalsTick[]): ComposureGrade {
     }
   });
   const dipped = low < 50;
-  const score = dipped ? 0 : clamp(Math.round(avg / 10), 0, 10);
+  const score = clamp(Math.round(avg / 10), 0, 10);
   return { score, avg, low, lowT, dippedBelow50: dipped };
 }
 
