@@ -2,6 +2,62 @@
 
 Real-time, high-stakes 911 dispatcher conversation trainer. 
 
+## Tech stack
+
+| Layer | Tech |
+|---|---|
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, custom design-system CSS |
+| **Voice AI (cloud)** | ElevenLabs Conversational AI — `@elevenlabs/react`, WebRTC, one agent per scenario |
+| **Grading AI (cloud)** | Google Gemini — `@google/genai`, structured-JSON scoring |
+| **Vitals AI (on-device)** | Presage SmartSpectra — `@smartspectra/node-sdk`, native-FFI rPPG from the webcam |
+| **Auth** | Auth0 — `@auth0/nextjs-auth0` v4, enforced in `src/proxy.ts` (Next 16's renamed middleware) |
+| **Runtime** | Long-lived Node process; per-session state held in-memory on `globalThis` |
+| **Resilience** | Every AI path degrades to a scripted **sim mode** when its key is absent — demoable with zero keys |
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph Browser["Browser — trainee's laptop"]
+    UI["Next.js 16 UI (React 19)<br/>Splash -> Login -> Calibrate -> Live Console -> Debrief"]
+    Cam["Webcam -> hidden canvas<br/>raw RGB frames @ ~30fps"]
+    Voice["@elevenlabs/react<br/>WebRTC audio + live transcript"]
+    Dir["Director FSM<br/>composure -> caller steering"]
+  end
+
+  subgraph Server["Next.js server — long-lived Node process"]
+    Proxy["proxy.ts — Auth0 gate on all routes"]
+    Token["/api/call/token<br/>mints short-lived EL token"]
+    Frame["/api/vitals/frame + /metrics<br/>presage-server.ts (per-session SDK map)"]
+    Grade["/api/grade — post-call scoring"]
+  end
+
+  subgraph Cloud["Cloud services"]
+    EL["ElevenLabs<br/>Conversational AI"]
+    GEM["Google Gemini"]
+    AUTH["Auth0"]
+  end
+
+  Presage["Presage SmartSpectra<br/>native SDK — ON-DEVICE rPPG<br/>pulse - breathing - expression"]
+
+  Cam -->|"POST frames"| Frame
+  Frame --> Presage
+  Presage -->|"vitals"| Frame
+  UI -->|"poll vitals @1Hz"| Frame
+  UI --> Token --> EL
+  Voice <-->|"WebRTC (audio in/out)"| EL
+  Dir -->|"contextual update"| Voice
+  UI -->|"on call end"| Grade --> GEM
+  UI --> Proxy --> AUTH
+
+  classDef cloud fill:#1e3a5f,stroke:#4a90d9,color:#fff
+  classDef local fill:#2d5016,stroke:#7cb342,color:#fff
+  class EL,GEM,AUTH cloud
+  class Presage local
+```
+
+**Key flows:** voice audio goes **browser ↔ ElevenLabs directly over WebRTC** (the server only mints the token, never touches audio); vitals go **webcam → server → local Presage SDK → polled back at 1 Hz**; the **director** loop reads the trainee's live composure from vitals and nudges the caller's panic mid-call; at hang-up the transcript + incident form go to **Gemini** for grading.
+
 ## Run it
 
 ```bash
