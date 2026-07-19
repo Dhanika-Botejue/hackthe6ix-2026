@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Nine One Run icon set — hand-drawn filled/duotone glyphs instead of generic
+ * dispatchlingo icon set — hand-drawn filled/duotone glyphs instead of generic
  * stroke outlines. Each icon declares its own preferred rendering mode; the
  * `fill` prop still overrides it for call-site compatibility.
  */

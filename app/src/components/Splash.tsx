@@ -39,8 +39,8 @@ export function Splash({ onDone }: { onDone: () => void }) {
           className="wordmark anim-fadeup"
           style={{ fontSize: 58, marginTop: 20, animationDelay: ".25s" }}
         >
-          <span className="lo">nine one</span>
-          <span className="hi">run</span>
+          <span className="lo">dispatch</span>
+          <span className="hi">lingo</span>
         </div>
         <div
           className="anim-fadeup text-muted"

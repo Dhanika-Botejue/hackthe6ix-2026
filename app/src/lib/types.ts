@@ -147,7 +147,7 @@ export interface Report {
   recSecs: number;
   perfScore: number;
   feedback: string;
-  /* Nine One Run grading */
+  /* dispatchlingo grading */
   composure: ComposureGrade;
   responses: ResponsesGrade;
   incident: IncidentGrade;

@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 
 /**
- * Nine One Run mascot / logo. Renders the brand owl from /public/owl.svg, so
+ * dispatchlingo mascot / logo. Renders the brand owl from /public/owl.svg, so
  * the logo can be swapped anywhere by replacing that single asset. `size` sets
  * the width; height follows the artwork's aspect ratio. `float` adds the idle
  * bob. `wink` is accepted for call-site compatibility (the flat asset doesn't
@@ -22,7 +22,7 @@ export function OwlMascot({
   return (
     <div
       role="img"
-      aria-label="Nine One Run owl mascot"
+      aria-label="dispatchlingo owl mascot"
       className={float ? "anim-float" : undefined}
       style={{
         width: size,

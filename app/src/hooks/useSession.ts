@@ -26,7 +26,13 @@ type BaselineState = "idle" | "running" | "done";
 /** "real" = Real Call mode: an actual call on the dispatcher's phone, transcribed off the laptop mic. */
 type CallMode = "sim" | "live" | "real" | null;
 
-/** How often Real Call mode re-runs the Gemini form extraction over the transcript. */
+/**
+ * How often Real Call mode re-runs the Gemini form extraction over the
+ * transcript. Every tick is a full Gemini request (thinking disabled, so each
+ * one is cheap/fast); runExtractTick already skips runs where nothing new was
+ * said, which is what actually keeps request volume down during quiet
+ * stretches.
+ */
 const EXTRACT_EVERY_MS = 6000;
 
 const BASELINE_SECS = Number(process.env.NEXT_PUBLIC_BASELINE_SECONDS ?? 15);
@@ -116,14 +122,16 @@ export function useSession() {
   const scenario = SCENARIOS[scenarioIdx];
 
   // Real Call mode mic transcription. One mic hears both sides of the phone
-  // call, so lines land as speaker-less "AUDIO" turns.
+  // call; ElevenLabs diarization + role detection attributes each utterance to
+  // the dispatcher ("YOU") or the caller ("CALLER"), with unattributed lines
+  // falling back to neutral "AUDIO" turns.
   const {
     start: startTranscription,
     stop: stopTranscription,
     listening: micListening,
     interim: micInterim,
     error: micError,
-  } = useLiveTranscription((text) => pushTurn("AUDIO", text));
+  } = useLiveTranscription((who, text) => pushTurn(who, text));
   useEffect(() => {
     if (micError) setLiveNotice(micError);
   }, [micError]);
@@ -600,7 +608,7 @@ export function useSession() {
 
     const ok = startTranscription();
     if (!ok) {
-      setLiveNotice("Live transcription needs Chrome or Edge — you can still fill the form manually.");
+      setLiveNotice("This browser can't record mic audio — you can still fill the form manually.");
     }
     timersRef.current.push(setInterval(() => runRealTick(), 1000));
     timersRef.current.push(setInterval(() => runExtractTick(), EXTRACT_EVERY_MS));

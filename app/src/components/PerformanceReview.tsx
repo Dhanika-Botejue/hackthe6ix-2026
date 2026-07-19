@@ -138,7 +138,7 @@ export function PerformanceReview({
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "8px 18px", borderBottom: "1px solid var(--border)", background: "rgba(6,10,20,0.7)", position: "sticky", top: 0, zIndex: 5, backdropFilter: "blur(8px)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <OwlMascot size={42} />
-          <div className="wordmark" style={{ fontSize: 21 }}><span className="lo">nine one</span><span className="hi">run</span></div>
+          <div className="wordmark" style={{ fontSize: 21 }}><span className="lo">dispatch</span><span className="hi">lingo</span></div>
         </div>
         <span className="bar-sep" />
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>

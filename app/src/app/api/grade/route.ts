@@ -20,9 +20,8 @@ export const maxDuration = 60;
 /** Free-tier models, best first; we fall through on availability errors. */
 const MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
-  "gemini-3.5-flash",
-  "gemini-3-flash",
-  "gemini-2.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash"
 ].filter((m): m is string => Boolean(m));
 
 interface GradeRequest {

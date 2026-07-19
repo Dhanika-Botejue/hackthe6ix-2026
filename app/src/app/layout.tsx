@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Nine One Run — Emergency dispatch training",
+  title: "dispatchlingo — Duolingo for dispatchers",
   description: "Train to run a 911 emergency line: stay calm, get the facts, save lives.",
 };
 

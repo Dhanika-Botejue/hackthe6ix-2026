@@ -18,9 +18,8 @@ export const maxDuration = 30;
 /** Same free-tier fallthrough as /api/grade. */
 const MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
-  "gemini-3.5-flash",
-  "gemini-3-flash",
-  "gemini-2.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3-flash"
 ].filter((m): m is string => Boolean(m));
 
 interface ExtractRequest {
@@ -102,6 +101,9 @@ export async function POST(req: Request) {
           temperature: 0,
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
+          // Extraction is a lookup, not a reasoning task — disable thinking
+          // tokens so the form fills fast and each call costs the minimum.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
       const parsed = JSON.parse(res.text ?? "") as Record<string, unknown>;

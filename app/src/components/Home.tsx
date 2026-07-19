@@ -319,8 +319,8 @@ export function Home({
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 8 }}>
           <OwlMascot size={210} float />
           <div className="wordmark" style={{ fontSize: 48, marginTop: 4 }}>
-            <span className="lo">nine one </span>
-            <span className="hi"> run</span>
+            <span className="lo">dispatch</span>
+            <span className="hi">lingo</span>
           </div>
           <div className="text-muted" style={{ maxWidth: 330, fontSize: 14 }}>
             Emergency dispatch training. Stay calm, get the facts, save lives.

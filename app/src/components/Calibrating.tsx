@@ -36,8 +36,8 @@ export function Calibrating({
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: 24 }}>
       <OwlMascot size={90} float />
       <div className="wordmark" style={{ fontSize: 28 }}>
-        <span className="lo">nine one </span>
-        <span className="hi"> run</span>
+        <span className="lo">dispatch</span>
+        <span className="hi">lingo</span>
       </div>
 
       <div style={{ position: "relative", width: 220, height: 220 }}>

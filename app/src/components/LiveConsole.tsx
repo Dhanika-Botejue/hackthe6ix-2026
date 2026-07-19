@@ -401,7 +401,7 @@ export function LiveConsole(props: {
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "8px 18px", borderBottom: "1px solid var(--border)", background: "rgba(6,10,20,0.7)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <OwlMascot size={42} />
-          <div className="wordmark" style={{ fontSize: 21 }}><span className="lo">nine one</span><span className="hi">run</span></div>
+          <div className="wordmark" style={{ fontSize: 21 }}><span className="lo">dispatch</span><span className="hi">lingo</span></div>
         </div>
         <span className="bar-sep" />
         {real ? (
@@ -637,7 +637,6 @@ export function LiveConsole(props: {
                           border: "1px solid var(--border)",
                         }}
                       >
-                        <div style={{ marginBottom: 3, fontSize: 11, fontWeight: 800, color: "var(--blue-2)" }}>Live audio</div>
                         {line.text}
                       </div>
                     </div>
@@ -671,9 +670,16 @@ export function LiveConsole(props: {
                           border: you ? "1px solid rgba(150,200,255,0.35)" : "1px solid var(--border)",
                         }}
                       >
-                        <div style={{ marginBottom: 3, fontSize: 11, fontWeight: 800, color: you ? "#cfe3ff" : "var(--red)" }}>
-                          {you ? "You" : "Caller"}
-                        </div>
+                        {/* Real Call mode: speaker attribution off the single
+                            speakerphone mic is too shaky to caption lines with,
+                            so bubbles stay unlabeled there. Training modes keep
+                            the captions — those roles come from the ElevenLabs
+                            agent session and are always right. */}
+                        {!real && (
+                          <div style={{ marginBottom: 3, fontSize: 11, fontWeight: 800, color: you ? "#cfe3ff" : "var(--red)" }}>
+                            {you ? "You" : "Caller"}
+                          </div>
+                        )}
                         {line.text}
                       </div>
                     </div>
@@ -802,7 +808,7 @@ export function LiveConsole(props: {
           style={{
             position: "fixed",
             left: "50%",
-            bottom: 92,
+            top: 58,
             transform: "translateX(-50%)",
             zIndex: 50,
             display: "flex",

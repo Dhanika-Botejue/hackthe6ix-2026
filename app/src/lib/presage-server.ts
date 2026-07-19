@@ -209,12 +209,20 @@ export async function getOrCreateSession(sessionId: string): Promise<PresageSess
 
   const mods = await loadModules();
   if (!mods) return null;
-  const { SmartSpectraSDK, FrameTransform, breathingMetrics, cardioMetrics, faceMetrics } = mods.sdk;
+  const { SmartSpectraSDK, FrameTransform, breathingMetrics } = mods.sdk;
   const { decodeMetrics } = mods.messages;
 
   const sdk = new SmartSpectraSDK({
     apiKey,
-    requestedMetrics: [...breathingMetrics, ...cardioMetrics, ...faceMetrics],
+    // Request ONLY the metrics this app actually reads, not the full
+    // cardio/face bundles. Every requested metric makes the SDK load its
+    // backing inference model, and a single model the API key isn't
+    // provisioned for kills the entire native graph (observed live: the
+    // cardio bundle's ARTERIAL_PRESSURE_TRACE → phasic-bp-inference 503'd
+    // "Model not available", which took pulse rate down with it even though
+    // the pulse model itself was fine). Codes from the SDK's constants.js:
+    // 15 = PULSE_RATE, 14 = EXPRESSIONS.
+    requestedMetrics: [...breathingMetrics, 15, 14],
   });
 
   const entry: PresageSession = {
